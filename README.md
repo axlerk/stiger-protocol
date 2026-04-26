@@ -1,5 +1,7 @@
 # Stiger Wire-Format Specification
 
+<!-- public-mirror-banner -->
+
 > **Public mirror.** This repository is automatically synchronised from the
 > `spec/` directory of the (private) Stiger source tree. Filing issues against
 > the spec here is fine; canonical edits happen upstream and propagate on
