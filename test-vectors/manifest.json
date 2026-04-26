@@ -1,0 +1,41 @@
+{
+  "generator" : "StigerTests\/SpecTestVectorsTests",
+  "spec_version" : "stealth-v3 \/ open-v1",
+  "vectors" : [
+    {
+      "carrier_size" : "64x64 solid",
+      "mode" : "open",
+      "name" : "open-hello",
+      "notes" : "Minimal open-mode vector. Anyone with the spec can read it.",
+      "plaintext_utf8" : "hello world",
+      "png" : "open-hello.png"
+    },
+    {
+      "carrier_size" : "128x128 solid",
+      "mode" : "stealth",
+      "name" : "stealth-hello",
+      "notes" : "Smallest stealth-mode vector. Padding fills the rest of the LSB capacity.",
+      "password" : "correct horse battery staple",
+      "plaintext_utf8" : "hello world",
+      "png" : "stealth-hello.png"
+    },
+    {
+      "carrier_size" : "256x256 solid",
+      "mode" : "stealth",
+      "name" : "stealth-long-message",
+      "notes" : "Longer message; same wire format, same fixed carrier size.",
+      "password" : "correct horse battery staple",
+      "plaintext_utf8" : "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ",
+      "png" : "stealth-long-message.png"
+    },
+    {
+      "carrier_size" : "256x256 with 10% transparent border",
+      "mode" : "stealth",
+      "name" : "stealth-with-transparent-border",
+      "notes" : "Verifies that the decoder ignores alpha < 255 pixels.",
+      "password" : "correct horse battery staple",
+      "plaintext_utf8" : "edge pixels are transparent and must be skipped",
+      "png" : "stealth-with-transparent-border.png"
+    }
+  ]
+}
