@@ -43,8 +43,9 @@ We cannot recover it. The password never leaves your device, and
 without it the secret is unrecoverable.
 
 **Q: I'm in Russia and the App Store won't let me pay.**
-All Pro features are unlocked automatically for users on the Russian
-App Store storefront.
+All Pro features are unlocked automatically when the app's UI language
+is Russian. This works whether Russian is your system language or you
+set it just for Stiger in iOS Settings → Stiger → Language.
 
 ## Contact
 
