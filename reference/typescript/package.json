@@ -1,0 +1,42 @@
+{
+  "name": "stiger-protocol-ts",
+  "version": "0.1.0",
+  "description": "Independent TypeScript reference decoder for the Stiger wire format.",
+  "type": "module",
+  "main": "./stiger_decode.ts",
+  "types": "./stiger_decode.ts",
+  "exports": {
+    ".": {
+      "types": "./stiger_decode.ts",
+      "import": "./stiger_decode.ts"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "verify": "tsx verify_test_vectors.ts ../../test-vectors"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.0"
+  },
+  "files": [
+    "stiger_decode.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "stiger",
+    "steganography",
+    "lsb",
+    "aes-gcm",
+    "reference-implementation"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/axlerk/stiger-protocol",
+    "directory": "reference/typescript"
+  }
+}
