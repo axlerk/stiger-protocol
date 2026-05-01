@@ -49,7 +49,7 @@ set it just for Stiger in iOS Settings → Stiger → Language.
 
 ## Contact
 
-**khudiakov.develop@gmail.com** — bugs, feature requests, security
+**hello@onegoodman.studio** — bugs, feature requests, security
 issues. For security issues, please prefix the subject line with
 `[SECURITY]`.
 

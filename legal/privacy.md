@@ -92,7 +92,7 @@ Updates will be published at this URL with a new "Last updated" date.
 Privacy questions, deletion requests, or anything else:
 
 **Individual Entrepreneur Pavel Khudiakov** (Tbilisi, Georgia)
-Email: khudiakov.develop@gmail.com
+Email: hello@onegoodman.studio
 
 The full registered address is on file with the Apple App Store and is
 disclosed to regulators on request.
