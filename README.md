@@ -39,6 +39,26 @@ The encoder side is *not* part of this spec: an attacker who can choose what
 to embed already has the password, so encoder behaviour is implementation
 detail. Only the decode path is normative.
 
+## A note on `tEXt` chunks in shipped stickers
+
+Stickers produced by the Swift engine may contain a `tEXt` chunk with the
+keyword `p` and a payload of random printable ASCII bytes, inserted between
+`IHDR` and `IEND`. This is a transport-layer size-normalization wrapper
+(see [`THREAT_MODEL.md`](THREAT_MODEL.md) §3, "File-size oracle on
+the wire") that pads every outgoing PNG to a per-image target size so that
+a network observer cannot tell, by byte count alone, whether a sticker
+carries a secret.
+
+The chunk is **not part of the wire format**: it does not affect the pixel
+raster, the LSB stream, or any framing/cryptographic field defined here.
+Reference decoders must ignore it the same way every standard PNG parser
+does — `PIL.Image.open` (Python), the `canvas`/`pngjs`/`sharp` family
+(TypeScript), and `UIImage`/`CGImage` (Swift) all transparently drop
+unrecognised metadata chunks before exposing pixels.
+
+If a future version of the wrapper changes (different keyword, multiple
+chunks, etc.), nothing in this spec needs to change either.
+
 ## Threat model
 
 This spec defines a **wire format**, not a threat model. For the security
