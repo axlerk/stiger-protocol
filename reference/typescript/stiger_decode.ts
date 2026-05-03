@@ -87,6 +87,11 @@ async function hmacSha256(
  * HKDF-SHA256 with empty salt (RFC 5869). Matches CryptoKit's
  * `HKDF<SHA256>.deriveKey(inputKeyMaterial:info:outputByteCount:)` when
  * no salt is supplied — see stealth-v3 §4.
+ *
+ * RFC 5869 says: "if salt is not provided, it is set to a string of
+ * HashLen zeros." We pass that explicit zero-filled buffer instead of
+ * a zero-length Uint8Array — output is identical, and some WebCrypto
+ * implementations (notably older iOS Safari) reject empty BufferSource.
  */
 async function hkdfSha256Empty(
   ikm: Uint8Array,
@@ -95,7 +100,7 @@ async function hkdfSha256Empty(
 ): Promise<Uint8Array> {
   const baseKey = await subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
   const bits = await subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info },
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info },
     baseKey,
     lengthBytes * 8,
   );
