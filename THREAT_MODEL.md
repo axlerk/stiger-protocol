@@ -44,6 +44,40 @@ Stiger hides short messages (≤ 2 KB of user text) inside PNG sticker
 images and ships them through Apple's iMessage as ordinary stickers. There
 are two modes:
 
+> **Note on transport.** Carriers are inserted as ordinary iMessage image
+> attachments via `MSConversation.insertAttachment(_:withAlternateFilename:)`,
+> not as `MSSticker` objects. The image-attachment path is the one Stiger
+> has verified end-to-end: PNG bytes reach the recipient closely enough
+> for LSB payloads to survive on a current iOS, which is what allows the
+> product to work at all. This is **observed platform behaviour, not a
+> security guarantee** — Apple can change it at any time, and §3 ("iMessage
+> recompression") already documents that any future recompression breaks
+> the payload.
+>
+> We deliberately **do not** route through `MSSticker` / Apple's sticker
+> pipeline. We empirically verified (May 2026, iOS 26) that the sticker
+> pipeline is incompatible with LSB-bearing PNGs in two independent ways:
+>
+> 1. **Bytes are re-encoded in transit.** A 512×512 / 207 KB PNG sent via
+>    `MSConversation.insert(MSSticker)` arrives at the recipient as a
+>    320×320 / 12 KB HEIC (`CGImageSourceGetType` reports `public.heic`,
+>    magic `…ftypheic`). Both the format change and the resampling
+>    destroy any LSB modification we put in.
+> 2. **Receiver-side bytes are not addressable.** Neither `UIPasteboard`
+>    (after `Copy`) nor `UIDropInteraction` (after drag) registers a
+>    `public.png` / `public.image` UTI for delivered stickers; only
+>    text-shaped representations of the bubble are exposed
+>    (`com.apple.uikit.attributedstring`, `com.apple.flat-rtfd`,
+>    `public.utf8-plain-text`). The only programmatic accessor is iOS 18+
+>    `NSAdaptiveImageGlyph.imageContent`, which yields the
+>    already-recompressed HEIC. Even if the pipeline were byte-stable,
+>    Stiger's reveal flow could not reconstruct the carrier.
+>
+> The colloquial word "sticker" used throughout this document and the
+> user-facing UI refers to the carrier's *visual* role (a small expressive
+> PNG), not to the `MSSticker` API.
+
+
 - **Open mode** — no password set. The carrier is a *public* sticker. The
   payload is framed by a fixed 9-byte header (`STEG` magic + version + length)
   and stored in row-major LSBs. Anyone with Stiger — or anyone with this

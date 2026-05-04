@@ -26,6 +26,7 @@ here, that is a bug. File an issue.
 | [`lsb-layer.md`](lsb-layer.md) | Mapping from PNG pixels to a flat byte stream. Shared by both modes. |
 | [`open-v1.md`](open-v1.md) | Open mode framing — public, no privacy. |
 | [`stealth-v3.md`](stealth-v3.md) | Stealth mode framing + cryptography. The mode that protects messages. |
+| [`transport.md`](transport.md) | *Informative.* What the shipping iOS app does to deliver byte-stable PNGs (image attachments, not `MSSticker`). Not part of the wire format. |
 | [`reference/python/`](reference/python/) | Reference decoder. ~250 lines, no Stiger code involved. |
 | [`test-vectors/`](test-vectors/) | Known PNGs + passwords + expected plaintext, emitted by the Swift engine. |
 
