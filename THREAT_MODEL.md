@@ -44,38 +44,16 @@ Stiger hides short messages (≤ 2 KB of user text) inside PNG sticker
 images and ships them through Apple's iMessage as ordinary stickers. There
 are two modes:
 
-> **Note on transport.** Carriers are inserted as ordinary iMessage image
-> attachments via `MSConversation.insertAttachment(_:withAlternateFilename:)`,
-> not as `MSSticker` objects. The image-attachment path is the one Stiger
-> has verified end-to-end: PNG bytes reach the recipient closely enough
-> for LSB payloads to survive on a current iOS, which is what allows the
-> product to work at all. This is **observed platform behaviour, not a
-> security guarantee** — Apple can change it at any time, and §3 ("iMessage
-> recompression") already documents that any future recompression breaks
-> the payload.
->
-> We deliberately **do not** route through `MSSticker` / Apple's sticker
-> pipeline. We empirically verified (May 2026, iOS 26) that the sticker
-> pipeline is incompatible with LSB-bearing PNGs in two independent ways:
->
-> 1. **Bytes are re-encoded in transit.** A 512×512 / 207 KB PNG sent via
->    `MSConversation.insert(MSSticker)` arrives at the recipient as a
->    320×320 / 12 KB HEIC (`CGImageSourceGetType` reports `public.heic`,
->    magic `…ftypheic`). Both the format change and the resampling
->    destroy any LSB modification we put in.
-> 2. **Receiver-side bytes are not addressable.** Neither `UIPasteboard`
->    (after `Copy`) nor `UIDropInteraction` (after drag) registers a
->    `public.png` / `public.image` UTI for delivered stickers; only
->    text-shaped representations of the bubble are exposed
->    (`com.apple.uikit.attributedstring`, `com.apple.flat-rtfd`,
->    `public.utf8-plain-text`). The only programmatic accessor is iOS 18+
->    `NSAdaptiveImageGlyph.imageContent`, which yields the
->    already-recompressed HEIC. Even if the pipeline were byte-stable,
->    Stiger's reveal flow could not reconstruct the carrier.
->
-> The colloquial word "sticker" used throughout this document and the
-> user-facing UI refers to the carrier's *visual* role (a small expressive
-> PNG), not to the `MSSticker` API.
+> **Note on transport.** Carriers are shipped as ordinary iMessage image
+> attachments (`MSConversation.insertAttachment`), **not** through Apple's
+> `MSSticker` pipeline — the latter re-encodes PNGs to HEIC in transit
+> and would destroy any LSB payload. This is **observed platform
+> behaviour, not a security guarantee**; the recompression failure mode
+> is covered in §3 ("iMessage transport"). See `README.md` →
+> "Carrier transport" for the empirical findings, the receive-side UTI
+> situation, and notes for re-implementers. The colloquial word
+> "sticker" in this document refers to the carrier's *visual* role
+> (small expressive PNG), not to the `MSSticker` API.
 
 
 - **Open mode** — no password set. The carrier is a *public* sticker. The
@@ -112,7 +90,7 @@ without the password — a passive observer cannot tell ciphertext from
 random LSBs. The LSBs of *natural photographs* would absorb this kind of
 modification well; sticker carriers (flat colour areas, sharp edges)
 provide weaker cover and are visible to trained stegoanalysis classifiers
-even without the password — see §2D and §7.1. The defense in this section
+even without the password — see §2E and §7.1. The defense in this section
 is against simple "look for known magic bytes" scanners, not against
 trained statistical analysis.
 
@@ -153,7 +131,82 @@ and are authenticated by the same HMAC. Two encodings of the same message
 into the same image produce different LSB streams (the non-LSB pixels are
 identical of course; only the LSB layer is randomised).
 
-### D. Corpus stego analysis
+### D. Forensic chat-log reviewer
+Someone with access to the recipient's (or sender's) Messages history —
+an iCloud Messages backup, an unlocked-device extraction, a `chat.db`
+dump, an iTunes backup parsed with off-the-shelf forensic tooling — who
+walks through the conversation looking for anomalies.
+
+This adversary doesn't run cryptographic analysis on individual PNGs;
+they read the chat as a whole and look for *patterns of behaviour*.
+
+**What we deliberately defend (visual mimicry).** At the *rendering*
+layer Stiger carriers aim for "indistinguishable at a glance" from
+ordinary stickers and jumbo emoji: PNG dimensions are tuned so the
+in-bubble visible glyph matches Apple's native single-emoji jumbo on
+screen, the colour palette comes from Apple's own SBIX bitmaps, and
+every send (stealth, open, or plain) is byte-size-normalized so an
+analyst skimming a chat list sees the same shape, the same size, the
+same general visual rhythm as the surrounding messages.
+
+**What we do NOT defend.** The carrier reaches the recipient as an
+**image attachment**, not as an `MSSticker`. Apple's Messages stack
+records the attachment with `attachment_type = image/png` (or similar
+`UTI = public.png`) in `chat.db`, and the rendered bubble is the
+"image bubble" UI affordance, not the bubble-less floating sticker UI.
+A reviewer who knows what to look for can therefore tell, without ever
+opening the PNG, that the user is exchanging *PNG attachments
+positioned where stickers would be more natural*. This pattern is more
+visible when the same chat contains real stickers from other contacts
+alongside Stiger PNGs from the user.
+
+This is a **deliberate trade-off**, not an oversight. `MSSticker`
+recompresses to HEIC in transit (verified May 2026, iOS 26 — see
+`README.md` "Carrier transport"), which destroys any LSB payload, and
+the receive-side bytes from the sticker pipeline are not addressable
+to the reveal flow. We *cannot* use `MSSticker` and have steganography
+work at all. The choice is "PNG-attachment carrier with this exposure"
+versus "no product."
+
+`MSSticker` carries hard format constraints — 300–618 px on the
+longest edge, ≤ 500 KB on disk, fragile APNG support — and Apple's own
+documented workaround for content that doesn't fit (animated, dynamic,
+oversized) is to ship the bytes via
+`MSConversation.insertAttachment(_:withAlternateFilename:)` instead
+(Apple Developer Forums thread 52931 et seq.). Stiger ships content
+that overflows those constraints in both directions: the regular_emoji
+pack is 232 px (below the 300-px floor), and several illustrated
+stickers are already over 500 KB on disk before any stealth padding
+brings them further over the ceiling. Plus we need PNG bytes to
+survive end-to-end so the LSB payload arrives intact, which the
+recompression path used by `MSSticker` would defeat anyway.
+
+So our use of `insertAttachment` falls into the same documented
+"content that doesn't fit MSSticker" bucket as benign sticker apps,
+plus an extra Stiger-specific reason. The user-visible artifact ("PNG
+attachment where a sticker would be more natural") is the same shape
+and appears in conversations involving non-Stiger apps too. It is not
+a Stiger-specific signature — it is an "uses an image-attachment
+carrier" signature, drawn from a population much wider than Stiger.
+See `docs/experiment-sticker-transport.md` for the supporting
+findings.
+
+What still holds when this pattern is noticed:
+- *Content confidentiality* — the PNG bytes themselves are still
+  AES-GCM ciphertext as far as a reviewer can tell. They see "this
+  user sends PNGs," not "this PNG hides text."
+- *Sender / recipient unlinking* — Stiger leaves no app-specific
+  fingerprint inside the PNG; an analyst cannot identify Stiger as the
+  tool from a single carrier alone (see §2.E "Corpus stego analysis"
+  for what changes when many carriers are available).
+- *Mode opacity* — open and stealth sends are byte-identical on the
+  wire, so the pattern doesn't betray which mode is in use.
+
+Users whose recipients' devices may be examined by parties with
+chat-database access should assume this signature is detectable and
+decide accordingly.
+
+### E. Corpus stego analysis
 An adversary collects many Stiger stickers and runs structural diffs
 against the originals (which they may also have, since most stickers are
 public emoji).

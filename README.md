@@ -26,7 +26,6 @@ here, that is a bug. File an issue.
 | [`lsb-layer.md`](lsb-layer.md) | Mapping from PNG pixels to a flat byte stream. Shared by both modes. |
 | [`open-v1.md`](open-v1.md) | Open mode framing — public, no privacy. |
 | [`stealth-v3.md`](stealth-v3.md) | Stealth mode framing + cryptography. The mode that protects messages. |
-| [`transport.md`](transport.md) | *Informative.* What the shipping iOS app does to deliver byte-stable PNGs (image attachments, not `MSSticker`). Not part of the wire format. |
 | [`reference/python/`](reference/python/) | Reference decoder. ~250 lines, no Stiger code involved. |
 | [`test-vectors/`](test-vectors/) | Known PNGs + passwords + expected plaintext, emitted by the Swift engine. |
 
@@ -40,11 +39,20 @@ The encoder side is *not* part of this spec: an attacker who can choose what
 to embed already has the password, so encoder behaviour is implementation
 detail. Only the decode path is normative.
 
+## A note on transport
+
+How a Stiger PNG reaches the recipient is a separate concern from the wire
+format and is **out of scope here**. The reference decoder accepts PNG bytes
+from any source. For the shipping iOS app's actual transport (image
+attachment via `MSConversation.insertAttachment`, deliberately not
+`MSSticker`) and the empirical findings behind that choice, see
+[`../README.md`](../README.md) → "Carrier transport".
+
 ## A note on `tEXt` chunks in shipped stickers
 
 Stickers produced by the Swift engine may contain a `tEXt` chunk with the
-keyword `p` and a payload of random printable ASCII bytes, inserted between
-`IHDR` and `IEND`. This is a transport-layer size-normalization wrapper
+keyword `Comment` and a payload of random printable ASCII bytes, inserted
+between `IHDR` and `IEND`. This is a transport-layer size-normalization wrapper
 (see [`THREAT_MODEL.md`](THREAT_MODEL.md) §3, "File-size oracle on
 the wire") that pads every outgoing PNG to a per-image target size so that
 a network observer cannot tell, by byte count alone, whether a sticker
