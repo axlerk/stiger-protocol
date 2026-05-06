@@ -206,6 +206,25 @@ Users whose recipients' devices may be examined by parties with
 chat-database access should assume this signature is detectable and
 decide accordingly.
 
+**Long-press → "From Stiger" menu does not surface per-bubble
+metadata to the extension** (verified 2026-05-06, iOS 26, two-device
+test, TestFlight build — see `docs/experiment-from-stiger-tap.md`).
+Tapping that entry launches the Stiger extension in compact mode
+with `MSConversation.selectedMessage = nil` and
+`extensionContext.inputItems` containing one empty `NSExtensionItem`
+with zero attachments — byte-identical to a regular drawer-launched
+activation. The system does not pass a reference to the tapped
+bubble. A hostile party holding the recipient's unlocked phone with
+Stiger installed therefore cannot use this surface as a one-tap
+decode oracle — they would still need to extract the carrier bytes
+manually (long-press → save image → drag/share into Stiger), which
+falls under the unlocked-phone threat already covered by Stiger's
+biometric/passcode lock screen. The behaviour of the inline "From
+[App]" attribution label (which iMessage sometimes shows beneath a
+bubble) was not cleanly reproducible during this test because Stiger
+is not yet published to the App Store; the routing of that surface
+on a production-installed receiver remains unverified.
+
 ### E. Corpus stego analysis
 An adversary collects many Stiger stickers and runs structural diffs
 against the originals (which they may also have, since most stickers are
