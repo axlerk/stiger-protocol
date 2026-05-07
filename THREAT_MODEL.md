@@ -269,7 +269,10 @@ Stiger is the wrong tool.
   exposure — that is the explicit tradeoff documented in `ParanoiaGuideView`).
   iOS 14+ shows a banner whenever any app reads the clipboard, so silent
   snooping by another foreground app is detectable by the user. This is an
-  OS-level mitigation, not Stiger's, but worth knowing.
+  OS-level mitigation, not Stiger's, but worth knowing. The clipboard write
+  itself is `localOnly` so the bytes never propagate via Universal Clipboard
+  to the user's other Apple-ID-paired devices — see §3 "Universal Clipboard
+  relay" for the positive guarantee.
 - Keyboard caches, autocorrect dictionaries, predictive text.
 - Screenshots of the compose UI sitting in the recents stack.
 
@@ -362,6 +365,27 @@ us (the `tEXt` "Comment" pad chunk added by `PNGPadder`, plus whatever
 `UIGraphicsImageRenderer` emits). A user importing a beach photo as a
 custom sticker does not leak the photo's GPS to chat recipients.
 
+### Note: Universal Clipboard relay (clipboard-send mode, positive guarantee)
+The Settings → "Copy instead of send" mode (Pro) writes the rendered PNG
+to the device pasteboard so the user pastes manually into Messages — used
+to suppress the "From Stiger" attribution iMessage shows under
+extension-inserted stickers. iOS Universal Clipboard would by default
+mirror `UIPasteboard.general` to every device on the same Apple ID over
+iCloud. Stiger opts out via `UIPasteboard.setItems(_:options:)` with
+`.localOnly: true` (`SecretInputViewController.writePNGToLocalPasteboard`),
+so neither the PNG bytes nor the metadata fact *"this user has a Stiger
+sticker on their clipboard right now"* leave the originating device
+through the iCloud channel. Local paste behaviour on the same device is
+unaffected.
+
+**Out of scope:** a third-party clipboard manager installed on the same
+device that scrapes pasteboard contents; another iOS/macOS application
+on the *same* device under the *same* user reading
+`UIPasteboard.general` immediately after the write. These are
+device-local threats addressed by the same biometric and OS-level
+protections that apply to any data touching the system pasteboard,
+not by Stiger specifically.
+
 ## 4. Guarantees per mode
 
 |                                          | Open mode | Stealth v3 |
@@ -376,6 +400,75 @@ custom sticker does not leak the photo's GPS to chat recipients.
 | Survives iMessage lossy recompression    | ❌        | ❌ |
 | Survives screenshot                      | ❌        | ❌ |
 | Survives device compromise               | ❌        | ❌ |
+
+### When the stealth-mode guarantees apply (encryption state machine)
+
+The "Stealth v3" column above only applies when outgoing sends actually
+take the stealth code path. Three independent storage values determine
+that:
+
+- `password` (Keychain, `*ThisDeviceOnly`)
+- `encryptionEnabled` (App Group `UserDefaults`, user toggle)
+- `isPro` (App Group `UserDefaults`, OR'd at read time with
+  `RussianAudience.isRussianSpeaking`)
+
+Each is mutated by a distinct affordance (Settings, ParanoiaGuide,
+StoreKit / language gate), and the three are independent — they can
+disagree. Stiger composes them into a typed `EncryptionState` (see
+`StigerCore/EncryptionState.swift`):
+
+| isPro | encryption | password | State              | Outgoing send mode |
+|-------|------------|----------|--------------------|--------------------|
+| ✓     | ✓          | set      | `.ready`           | stealth ✅          |
+| ✓     | ✓          | empty    | `.needsPassword`   | composer blocks    |
+| ✓     | ✗          | set      | `.userDisabled`    | open (banner)      |
+| ✓     | ✗          | empty    | `.proIdle`         | open               |
+| ✗     | ×          | set      | `.lapsed`          | open + dialog gate |
+| ✗     | ×          | empty    | `.free`            | open (upsell)      |
+
+Only `.ready` resolves to an active encryption password. Every other
+state encodes outgoing payloads in **open mode** — the user's saved
+password is preserved in storage but not used until the state returns
+to `.ready`. The composer renders a distinct warning banner for each
+disagreement state; the send pipeline blocks plaintext-fallthrough in
+the `.lapsed` case behind a one-shot "Send unencrypted?" confirmation
+dialog (`SecretInputViewController.presentLapseConfirmation`,
+suppressed for the rest of the lapse window via
+`SharedDefaults.lapseAcknowledged`, cleared on Pro restoration).
+
+**Why the ceremony.** Earlier versions papered over disagreements
+between the three storage values by silently mutating one of them on
+entry — defensively re-enabling `encryptionEnabled` whenever a password
+existed, wiping the password on toggle-off, and clearing
+`encryptionEnabled` whenever Pro lapsed. The combination shipped a
+failure mode (`[pro-lapse-1] + [send-1]`) where a lapsed-Pro user
+could send a typed secret in plain mode while the composer showed
+nothing alarming. Each silent fix-up was correct in isolation;
+together they hid a critical hole. The state-machine model is the
+remediation: every disagreement is now a first-class value the UI
+renders explicitly, and the dialog gates plaintext sends behind
+explicit consent.
+
+**Pro-gate invariant**: `password != "" → isPro` (in production).
+Setting a non-empty password is a Pro-only operation. Every UI entry
+point that writes to `SharedDefaults.password` /
+`SharedDefaults.contactPassword` (Settings, ParanoiaGuide,
+PairingFlow, the extension's password field, contact-password
+auto-save on successful decode) guards on `proAccess.isPro`. A
+DEBUG-only `assertionFailure` in the keychain setter catches any
+future entry point that misses the gate before merge. Therefore
+`.lapsed` (`!isPro && password != ""`) is reachable in production
+only by a former-Pro user whose subscription expired.
+
+**Pro-restoration semantics.** When Pro returns (purchase or
+restore), `encryptionEnabled` and `password` are unchanged;
+`.lapsed` transitions back to whichever state the flags naturally
+resolve to (`.ready`, `.userDisabled`, etc). The standing
+"plaintext send acknowledged" flag is cleared on restoration so a
+*future* lapse re-prompts. The host-app `ProAccess.refreshStatus`
+and the extension's `ExtensionProEntitlement.refresh` (called
+from `viewDidLoad` to remove the dependency on the host app
+having been opened recently) both clear it.
 
 ## 5. Trust assumptions
 
@@ -458,11 +551,31 @@ end-to-end encode/decode through the LSB engine.
 
 4. **No forward secrecy.** A password leak retroactively decrypts every
    sticker ever sent under that password. *Operational mitigation:*
-   removing the password from Settings (or toggling encryption off)
-   wipes it from the Keychain; if no copy exists elsewhere, prior
-   captures become permanently undecryptable. Useful only when invoked
+   clearing the password field in Settings (or ParanoiaGuide) wipes
+   it from the Keychain; if no copy exists elsewhere, prior captures
+   become permanently undecryptable. Useful only when invoked
    *before* compromise — once an attacker has a Keychain dump, the
    wipe comes too late.
+
+   Note: toggling encryption *off* does **not** wipe the saved
+   password (this used to wipe; see §4 "encryption state machine"
+   for why the coupling was removed). Two distinct user intents,
+   two distinct affordances:
+
+   - "Pause encryption temporarily, keep the credential" → toggle
+     off. Re-enabling restores the same password — no re-pairing,
+     no loss of access to old encrypted history.
+   - "Forget the credential entirely" → clear the password field
+     in Settings (the field is visible while encryption is on; a
+     dedicated "forget password" affordance is on the roadmap so
+     this works without an enable-then-clear-then-disable dance).
+
+   The previous coupling lost the user's setup on every toggle-off,
+   which both broke the re-enable use case and gave no extra
+   security (a Keychain dump still recovers the wiped value if it
+   happens before the deletion is sealed; biometric protection on
+   the extension/Settings is the real gate against on-device
+   reads).
 
 5. **No per-recipient keys.** Pro offers a separate contact's password slot, but
    password distribution is still manual.
