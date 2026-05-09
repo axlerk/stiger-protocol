@@ -273,7 +273,14 @@ Stiger is the wrong tool.
   itself is `localOnly` so the bytes never propagate via Universal Clipboard
   to the user's other Apple-ID-paired devices — see §3 "Universal Clipboard
   relay" for the positive guarantee.
-- Keyboard caches, autocorrect dictionaries, predictive text.
+- Third-party keyboards with Full Access (Gboard, SwiftKey, etc.)
+  run in their own processes and can phone home with every keystroke
+  entered into the secret-input text view. Stiger can't enforce a
+  system-keyboard restriction from inside an iMessage extension;
+  mission users should disable Full Access keyboards in iOS Settings
+  before composing secrets. Password fields use `isSecureTextEntry`,
+  so iOS forces the system keyboard there automatically — only the
+  open secret input is exposed.
 - Screenshots of the compose UI sitting in the recents stack.
 
 ### Metadata about the conversation
