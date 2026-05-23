@@ -113,11 +113,12 @@ Security reduces to: *can you find the password?*
   the engine returns `noPayloadFound` either way.
 - The recipient's reveal UI extends this ambiguity to the screen.
   A free user (no Pro, no password to try) sees the same ambient
-  "empty-or-encrypted, Pro + password unlocks" banner on every
-  `noPayloadFound` outcome — truly-empty stickers included. The
-  banner's appearance therefore never reveals whether THIS particular
-  sticker carries a payload, so a shoulder-surfer or an examiner of
-  a non-Pro recipient's device cannot use the screen as an oracle.
+  "empty-or-encrypted, decryption needs Pro and a password" status
+  line plus a Get-Pro link on every `noPayloadFound` outcome — truly
+  empty stickers included. The screen's appearance therefore never
+  reveals whether THIS particular sticker carries a payload, so a
+  shoulder-surfer or an examiner of a non-Pro recipient's device
+  cannot use the screen as an oracle.
 
 The real defense here is **password entropy**. A 6-character password is
 breakable on commodity GPU hardware in hours. A 4-word EFF-diceware
