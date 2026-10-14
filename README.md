@@ -50,14 +50,15 @@ attachment via `MSConversation.insertAttachment`, deliberately not
 
 ## A note on `tEXt` chunks in shipped stickers
 
-Stickers produced by the Swift engine **in release 1.0** contain a `tEXt` chunk
+Stickers produced by the Swift engine **in the TestFlight beta (builds through 48)** contain a `tEXt` chunk
 with the keyword `Comment` and a payload of random printable ASCII bytes,
 inserted before `IEND`. It was a transport-layer size-normalization wrapper (see
 [`THREAT_MODEL.md`](THREAT_MODEL.md) §3, "File-size oracle on the wire")
-that padded every outgoing PNG to a per-image target size. Later releases do not
-write it: every send instead carries a random blue-LSB plane, so sizes agree
-without padding (`THREAT_MODEL.md` §7.10). Files from 1.0 are still in
-circulation, so decoders will keep meeting the chunk.
+that padded every outgoing PNG to a per-image target size. Release 1.0, the first
+public release (build 49 onward), and later releases do not write it: every send instead carries a random blue-LSB plane, so sizes agree
+without padding (`THREAT_MODEL.md` §7.10). Files from the beta are still in
+circulation (the beta was shown at Ekoparty 22 on 2026-10-09), so decoders will
+keep meeting the chunk.
 
 The chunk is **not part of the wire format**: it does not affect the pixel
 raster, the LSB stream, or any framing/cryptographic field defined here.
