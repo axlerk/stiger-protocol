@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Pavel Khudiakov
 """Reference decoder for the Stiger wire format.
 
 This file is the *canonical* example implementation of the spec in
@@ -122,6 +124,10 @@ def decode_open(slots: Slots) -> bytes:
 
     header = read_bytes(slots, OPEN_HEADER_SIZE)
     if header[0:4] != OPEN_MAGIC:
+        raise ValueError("no payload found")
+    # Reject versions we do not know, so a future incompatible format that
+    # reuses the magic is not silently parsed as open-v1.
+    if header[4] != OPEN_VERSION:
         raise ValueError("no payload found")
 
     length = int.from_bytes(header[5:9], "big")

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Pavel Khudiakov
 // Reference Decoder (TypeScript) — independent decoder for the Stiger wire
 // format. Written from `../../stealth-v3.md`, `../../open-v1.md` and
 // `../../lsb-layer.md` only. No Stiger code involved.

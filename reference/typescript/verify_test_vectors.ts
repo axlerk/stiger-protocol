@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Pavel Khudiakov
 // Decode every vector listed in `<vectors-dir>/manifest.json` and compare the
 // decoded plaintext to `plaintext_utf8`. Mirrors the Python verify script
 // next door (`../python/verify_test_vectors.py`). Exit `0` means this TS

@@ -17,8 +17,9 @@ derived via PBKDF2-SHA256-600k) and hides the ciphertext in the
 least-significant bits of an ordinary PNG sticker, then sends it through
 iMessage. **What it protects:** the message content (unreadable without
 the password) and the message length (padded to LSB capacity). **What it
-does not:** trained stegoanalysis can detect that *some* LSB modification
-happened (without recovering the message); a compromised device, a
+does not:** statistical stegoanalysis can detect that *some* LSB modification
+happened (without recovering the message) — textbook tests need neither
+training nor the original, see §3; a compromised device, a
 forensic Keychain dump, screenshots, or iMessage recompression all defeat
 or destroy the payload. **Open mode** (no password) is publicly readable
 by anyone with Stiger and is not a privacy feature. **No forward secrecy:**
@@ -29,8 +30,9 @@ before relying on Stiger for anything serious.
 растягивается через PBKDF2-SHA256-600k) и прячет шифротекст в младшие
 биты обычного PNG-стикера, отправляемого через iMessage. **Что защищает:**
 содержимое сообщения (нечитаемо без пароля) и его длину (паддинг до
-полной ёмкости стикера). **Чего не защищает:** обученный стегоанализ
-видит сам факт LSB-модификации (без чтения сообщения); компрометация
+полной ёмкости стикера). **Чего не защищает:** статистический стегоанализ
+(хватает учебных тестов, без обучения и без оригинала) видит сам факт
+LSB-модификации (без чтения сообщения); компрометация
 устройства, форензик-дамп Keychain, скриншоты и пережатие iMessage —
 всё это либо обходит, либо уничтожает payload. **Открытый режим** (без
 пароля) читается любым, у кого есть Stiger, — это не приватность.
@@ -41,8 +43,8 @@ before relying on Stiger for anything serious.
 ## 1. Scope
 
 Stiger hides short messages (≤ 2 KB of user text) inside PNG sticker
-images and ships them through Apple's iMessage as ordinary stickers. There
-are two modes:
+images and ships them through Apple's iMessage as ordinary-looking PNG
+stickers. There are two modes:
 
 > **Note on transport.** Carriers are shipped as ordinary iMessage image
 > attachments (`MSConversation.insertAttachment`), **not** through Apple's
@@ -89,10 +91,15 @@ Both are computationally indistinguishable from uniform random noise
 without the password — a passive observer cannot tell ciphertext from
 random LSBs. The LSBs of *natural photographs* would absorb this kind of
 modification well; sticker carriers (flat colour areas, sharp edges)
-provide weaker cover and are visible to trained stegoanalysis classifiers
-even without the password — see §2E and §7.1. The defense in this section
-is against simple "look for known magic bytes" scanners, not against
-trained statistical analysis.
+provide weaker cover and are visible to statistical stegoanalysis
+even without the password — see §2E and §7.1. Textbook tests (pairs-of-values
+chi-square, RS) tell stealth carriers from unmodified stickers with no
+training and no original: 133/133 detected, 0/133 false positives for
+chi-square p ≥ 0.001, real engine, library stickers (measured 2026-10-10,
+`docs/experiment-steganalysis.md` §3, §5). The defense in this section is
+against simple "look for known magic bytes" scanners — stock `zsteg` (default
+and `-a`) and `StegExpose` at its default threshold report no LSB finding on
+sticker-sized stealth carriers — not against statistical analysis.
 
 ### B. Reverse engineer with a copy of the .ipa
 Someone disassembles Stiger, reads the protocol, and tries every captured
@@ -132,12 +139,24 @@ attacker.
 Tools that look for known magic bytes (`STEG`, `STG2`, `JPEG comment + base64`,
 PNG `tEXt` chunks, etc).
 
-**Defense:** stealth mode has no magic bytes. The first 16 bytes of the LSB
+**Defense:** stealth mode has no magic bytes. (Open mode does: its
+carriers start with a fixed `STEG` header, and this defense does not
+apply to them — see §1 and §2.D.) The first 16 bytes of the LSB
 stream are a random salt; the next 4 bytes are an HMAC-derived marker that
 varies per message; bytes 20–21 are XOR-masked version and reserved bytes
 and are authenticated by the same HMAC. Two encodings of the same message
 into the same image produce different LSB streams (the non-LSB pixels are
 identical of course; only the LSB layer is randomised).
+
+**Measured (2026-10-10).** On stealth carriers `zsteg` and default-threshold
+`StegExpose` find no LSB payload. But this item lists PNG `tEXt` chunks among
+what such scanners look for, and on release 1.0 `zsteg` printed the
+size-normalizing `Comment` pad as a finding on all 201 sampled sends from the
+real pipeline (67 each of stealth, open and plain) and on both delivered
+iMessage files, while reporting nothing in the LSB plane of any of them, and
+`exiftool` prints the pad as a `Comment` tag with the warning "Text/EXIF chunk(s)
+found after PNG IDAT" on both delivered files (`pngcheck` and `binwalk` report
+nothing unusual). The pad is gone from the release after 1.0 (§3 "File-size oracle", §7.7, §7.10).
 
 ### D. Forensic chat-log reviewer
 Someone with access to the recipient's (or sender's) Messages history —
@@ -153,9 +172,11 @@ layer Stiger carriers aim for "indistinguishable at a glance" from
 ordinary stickers and jumbo emoji: PNG dimensions are tuned so the
 in-bubble visible glyph matches Apple's native single-emoji jumbo on
 screen, the colour palette comes from Apple's own SBIX bitmaps, and
-every send (stealth, open, or plain) is byte-size-normalized so an
-analyst skimming a chat list sees the same shape, the same size, the
-same general visual rhythm as the surrounding messages.
+every send (stealth, open, or plain) comes out at the same byte size — by
+equal compressibility under uniform cover from the release after 1.0, by
+padding in 1.0 (§3 "File-size oracle") — so an analyst skimming a chat list
+sees the same shape, the same size, the same general visual rhythm as the
+surrounding messages.
 
 **What we do NOT defend.** The carrier reaches the recipient as an
 **image attachment**, not as an `MSSticker`. Apple's Messages stack
@@ -167,6 +188,31 @@ opening the PNG, that the user is exchanging *PNG attachments
 positioned where stickers would be more natural*. This pattern is more
 visible when the same chat contains real stickers from other contacts
 alongside Stiger PNGs from the user.
+
+The image-attachment nature also shows **on screen**, not only in
+`chat.db`. Two tells, observed by Pavel on his iPhone on 2026-10-08
+(screenshot 1179×2556 px: two native 🤐 emoji and two `emoji_zipper`
+carriers in one conversation, every fully visible face drawn at
+185×185–187 px — the size match itself held):
+
+- **Save button on received carriers.** Messages draws a save button
+  (a circled ⬇) next to a *received* image attachment. A received
+  carrier gets one; a native emoji, being text, never does. So in the
+  received half of a conversation a carrier can be told from an emoji
+  at a glance, without opening anything. Sent carriers showed no such
+  button in the same screenshot.
+- **Archived carriers.** After some time, carriers are archived: they
+  appear as a PNG attachment that has to be downloaded again from
+  iCloud, not as an emoji-sized picture, while native emoji around
+  them keep rendering as text. (The mechanism is presumably Messages
+  in iCloud offloading old attachments — inferred, not verified.)
+  The payload survives the round trip: Pavel reported on 2026-10-09 that
+  an archived carrier, downloaded again from iCloud, still reveals. The
+  device, iOS version and how long the carrier had been archived were
+  not recorded.
+
+"Indistinguishable at a glance" therefore holds for a recent, sent
+carrier. It does not hold for a received one, nor for an old one.
 
 This is a **deliberate trade-off**, not an oversight. `MSSticker`
 recompresses to HEIC in transit (verified May 2026, iOS 26 — see
@@ -199,16 +245,37 @@ carrier" signature, drawn from a population much wider than Stiger.
 See `docs/experiment-sticker-transport.md` for the supporting
 findings.
 
-What still holds when this pattern is noticed:
-- *Content confidentiality* — the PNG bytes themselves are still
-  AES-GCM ciphertext as far as a reviewer can tell. They see "this
-  user sends PNGs," not "this PNG hides text."
-- *Sender / recipient unlinking* — Stiger leaves no app-specific
-  fingerprint inside the PNG; an analyst cannot identify Stiger as the
-  tool from a single carrier alone (see §2.E "Corpus stego analysis"
-  for what changes when many carriers are available).
-- *Mode opacity* — open and stealth sends are byte-identical on the
-  wire, so the pattern doesn't betray which mode is in use.
+What still holds when this pattern is noticed, for **stealth** carriers:
+- *Content confidentiality* — the payload is AES-GCM ciphertext as far
+  as a reviewer can tell. They see "this user sends PNGs," not "this
+  PNG hides text."
+- *Sender / recipient unlinking* — the LSB stream of a stealth carrier
+  has no app-specific fingerprint, so an analyst cannot identify Stiger
+  from that stream of a single carrier (see §2.E "Corpus stego analysis"
+  for what changes when many carriers are available). In release 1.0 the
+  size-normalizing pad chunk was **not** covered by this: a `Comment` of
+  random printable ASCII, 2.4–79 KB across the 133 stickers tested (1 KB or
+  more on every one), where a survey of 28 653 PNGs in system and
+  application directories found no `Comment` over 1 KB (§3 "File-size
+  oracle"; that population is OS resources, not photos or other apps'
+  stickers). Whether file-level tooling can attribute a send to Stiger from it
+  was never tested. The release after 1.0 has no pad chunk (§7.10).
+- *Mode opacity, total size only* — plain, open and stealth sends have the
+  same total byte size (identical for 133/133 stickers in 1.0; within a median
+  0.04 % without any padding after 1.0), so the chat-level pattern doesn't
+  betray which mode is in use. In 1.0 this did **not** hold at file level: the
+  length of the pad chunk gave stealth away (§3 "File-size oracle", §7.7).
+
+**Open carriers break the first two.** An open-mode carrier stores its
+payload in plaintext behind the fixed `STEG` header (`spec/open-v1.md`
+§3), so any LSB scanner that applies the eligibility rule (`alpha == 255` only,
+`spec/lsb-layer.md` §3) reads the message and learns that Stiger was used.
+(Stock `zsteg` reads every pixel and misses it on stickers with transparency —
+measured, a tooling accident and not a defence.) One open carrier in a chat
+also puts the other image attachments in that chat under suspicion: a stealth
+carrier next to a known Stiger carrier is attributable by association,
+even though it carries no fingerprint of its own. See
+`docs/release-1.0.md`, "Post-1.0 security design backlog" §2.
 
 Users whose recipients' devices may be examined by parties with
 chat-database access should assume this signature is detectable and
@@ -246,7 +313,8 @@ LSBs touched). The number of modified LSBs no longer leaks the message length.
 **Limit:** the modification *rate* itself is still high (~50% of LSBs flipped
 on average vs ~0% for an unmodified PNG of the same source). Detection of
 "some LSB stego is present" is feasible — both via diff against the
-original and via trained stegoanalysis without the original. See §3
+original and via statistical tests without the original (textbook ones
+suffice, measured in §3). See §3
 "Trained stegoanalysis classifiers" for the full picture and what still
 holds when this detection happens.
 
@@ -290,6 +358,19 @@ Stiger is the wrong tool.
   so iOS forces the system keyboard there automatically — only the
   open secret input is exposed.
 - Screenshots of the compose UI sitting in the recents stack.
+- Apple Maps sees the map areas Stiger shows, from the device's IP. MapKit
+  is not offline. When a revealed secret carries coordinates — an attached
+  location (`geo:`) or a map link with coordinates in it — the reveal screen
+  renders a map preview with `MKMapSnapshotter` right away, without a tap,
+  so Apple's map servers receive the region around the decrypted
+  coordinates, from the recipient's IP, at the moment of reading. On the
+  sending side the location picker loads tiles for whatever region is on
+  screen, and place search sends the typed query through
+  `MKLocalSearchCompleter` / `MKLocalSearch`. Stiger itself sends the
+  coordinates nowhere, but for a secret that *is* a place, the area Apple
+  sees is most of what the secret says. Kept as a deliberate trade-off
+  (decided 2026-09-29, see §7). To keep a place away from Apple entirely,
+  send it as plain text rather than as an attached location or a map link.
 
 ### Metadata about the conversation
 - iMessage routing metadata (who sent what to whom, when).
@@ -304,6 +385,14 @@ Stiger is the wrong tool.
   `noPayloadFound`), so this is a reliability issue, not a confidentiality
   one.
 - Screenshots of stickers do not preserve LSBs and are not valid carriers.
+- **Measured once (2026-10-10, n = 2 carriers, one stealth and one open).**
+  Sent from an iPhone 15 Pro Max on iOS 26.6.2 to an iPhone 15 Pro on
+  iOS 27.0.1 in a one-to-one chat, the sent and the received file were
+  byte-identical (same SHA-256, 477 083 bytes) and both decoded. The "sent"
+  copy is what Messages exports, not what the extension handed to
+  `insertAttachment`; Low Quality Image Mode and Messages in iCloud were not
+  recorded. Still observed platform behaviour, not a guarantee
+  (`docs/experiment-steganalysis.md` §4).
 
 ### Carrier indistinguishability vs the original PNG
 v3 stealth hides *content* and *length*, not *the fact that LSB modification
@@ -324,14 +413,36 @@ source image — the detection is based on intrinsic statistical features
 of the suspect carrier alone. Forensic vendors and state-level toolchains
 include such detectors.
 
+**Measured: classical tests and two small ML detectors (a stronger ML detector
+was not run, so the statement about ML tools above remains an assumption).** On all 133 library stickers
+through the real send pipeline, pairs-of-values chi-square (p ≥ 0.001) flags
+133/133 stealth sends and 0/133 plain and 0/133 open sends; RS (`d ≥ 0.25`)
+flags 118/133 stealth and none of the others. The same tests on a delivered
+iMessage file gave p = 0.926 / RS d = 0.364 for stealth against p = 0 /
+d = −0.003 for open. The cause is the full-capacity fill: in a pixel
+simulation chi-square flagged nothing at 1.4–15 % fill, and RS flagged nothing
+for ±1 LSB matching at any size tried — the length-hiding design buys its
+property at this price (`docs/experiment-steganalysis.md` §3, §5, §7). The same
+rule flagged 19 of 4 043 ordinary PNGs found in system and application
+directories (0.47 %, mostly noisy textures) — a population of UI assets, not of
+photos or other apps' stickers, so a floor and not an estimate for a real chat
+(`docs/experiment-steganalysis.md` §10). Two small ML detectors (SPAM features with
+logistic regression or gradient boosting; a small CNN; a few thousand patches of
+the 133 stickers, tested on stickers they had not seen) told 1.0 plain from stealth
+at 98–99 % per sticker, and cannot tell shipped plain from shipped stealth (about
+50 %). Low-fill ±1 embedding, which the classical tests missed, was still found by
+SPAM: whole-image AUC 0.63–0.71 at 1 % slot fill and 0.8–0.9 at 4–12 %. These
+detectors are weak by research standards, and "not detected" by them is not "safe"
+(`docs/experiment-steganalysis.md` §11).
+
 What still holds when "this is some LSB carrier" is detected:
 - *Content confidentiality* — AES-256-GCM ciphertext is not recoverable
   without the password.
 - *Stiger-specific identification* — no magic bytes, no fixed headers,
   no spatial pattern. The carrier looks like any other LSB tool's output.
 - *Payload length* — hidden by full-capacity padding.
-- *On-the-wire file size* — hidden by per-image size normalization (§3,
-  "File-size oracle").
+- *On-the-wire file size* — equal across modes by equal compressibility
+  (uniform cover; padding in 1.0), §3 "File-size oracle".
 
 What is lost: the deniability claim "this PNG carries nothing." A
 stegoanalysis classifier can say with high confidence that *something*
@@ -339,28 +450,49 @@ is hidden in opaque LSBs. Mission-class adversaries should assume this
 detection is feasible and design their operational use accordingly.
 
 ### File-size oracle on the wire
-**Defense:** every PNG sent through the iMessage extension — stealth send,
-open send, and plain (no-secret) send — is padded to a per-image normalized
-byte size before it leaves the process. The target size is computed from
-the source image's pixels (cached in App Group `UserDefaults`) plus a small
-per-install jitter, so:
+**Defense (release after 1.0): uniform cover.** Every PNG sent through the
+iMessage extension — stealth, open and plain (no-secret) — leaves with a fully
+random blue-LSB plane on its opaque pixels. A plain send is the sticker with
+fresh random LSBs (`ImageStegoEngine.coverImage`); an open send is that random
+plane with the 9-byte header and the payload laid over it; in a stealth send the
+AES-GCM block fills the capacity. The three therefore compress alike and have
+the same byte size **without any padding**. Measured on the real engine, 133
+library stickers, no pad (`docs/experiment-steganalysis.md` §9): cover-plain and
+cover-open sends are within a median 0.04 % (max 0.44 %) of the stealth send's
+size, and one kind against itself differs by a median 0.05 % — the gap between
+modes is no larger than the run-to-run spread inside one mode. So:
 
-- A network observer or anyone holding the chat history cannot tell, by
-  byte count alone, whether a sticker carries a secret.
-- Two stealth sends of the same carrier with different payloads are
-  byte-identical on the wire.
-- A plain send and a stealth send of the same carrier are byte-identical
-  on the wire.
+- A network observer or anyone holding the chat history cannot tell, by byte
+  count alone, whether a sticker carries a secret.
+- No pad chunk exists, so there is no pad length or pad share to leak the mode
+  and no `Comment` chunk for stock tooling to flag.
+- The send-size cache of 1.0 is gone; `SharedDefaults` deletes what 1.0 left in
+  the App Group defaults at the next launch (a hash per image ever sent).
 
-Padding is performed by inserting a `tEXt` chunk of random ASCII bytes
-before the `IEND` chunk (`StigerCore/PNGPadder.swift`). The chunk is *not*
-disguised as another editor's metadata — that would be obscurity over
-security and trivially detectable on close inspection. The chunk only
-defends the network-observer model, where its contents are invisible.
+This is not part of the wire spec: the `open-v1` and `stealth-v3` decoders read
+only the header and payload (`docs/experiment-steganalysis.md` §9).
+
+**Release 1.0 (shipped): padding.** 1.0 padded every send to a per-image target
+(`max(plain, stealth probe) + margin + jitter`, cached in the App Group
+`UserDefaults`) by inserting a `tEXt` chunk of random printable ASCII before
+`IEND`. That equalised total sizes (identical for 133/133 stickers) but not the
+chunks that make them up. Measured 2026-10-10 on the 1.0 pipeline: a stealth PNG
+compresses worse than a plain one, so the pad that tops it up is shorter — a
+median 4.9 % of the file for stealth against 10.7 % for plain and open, shorter
+for stealth on 133/133 stickers. One threshold on that share separated stealth
+from plain/open with 99.2 % balanced accuracy from chunk lengths alone, without
+decoding pixels or having the original. The share is a symptom of the stealth
+file's lower compressibility, which the LSB tests see anyway, so sizing the pad
+differently could not remove it (sizing from the plain PNG would make stealth
+files exceed the target and the padder would no-op). The pad was also the one PNG
+feature stock tooling flagged: `zsteg` printed it on every 1.0 send we sampled.
+That is why it was dropped. See §7.7, §7.10 and
+`docs/experiment-steganalysis.md` §5, §6, §8.
 
 **Out of scope for this defense:**
-- Forensic file-level analysis of an extracted PNG (the pad chunk itself is
-  visible and may be flagged as anomalous — see §7).
+- Statistical LSB tests: under uniform cover they flag every Stiger send as
+  LSB-modified, plain ones included (§3 "Trained stegoanalysis classifiers",
+  §7.10).
 - LSB-detection by bitwise diff against a known original (unchanged from
   the previous section).
 
@@ -376,8 +508,8 @@ clipboard, Telegram-pack imports) are re-rendered through
 does **not** carry through EXIF, GPS coordinates, camera make/model,
 authoring tool, original timestamps, or any other PNG/JPEG metadata from
 the user's source file. Any metadata in an outgoing PNG is generated by
-us (the `tEXt` "Comment" pad chunk added by `PNGPadder`, plus whatever
-`UIGraphicsImageRenderer` emits). A user importing a beach photo as a
+the system image encoder (`UIGraphicsImageRenderer` / `pngData()`; release 1.0
+also added a `tEXt` "Comment" pad chunk). A user importing a beach photo as a
 custom sticker does not leak the photo's GPS to chat recipients.
 
 ### Note: Universal Clipboard relay (clipboard-send mode, positive guarantee)
@@ -409,8 +541,9 @@ not by Stiger specifically.
 | Authenticity of message content          | ❌ none   | ✅ GCM tag |
 | Hides message length                     | ❌        | ✅ pads to capacity |
 | Hides Stiger-specific markers (magic / headers)  | ❌ `STEG` magic in cleartext | ✅ no magic, no fixed bytes |
-| Hides "this PNG carries some LSB stego"          | ❌        | ❌ trained stegoanalysis can detect — see §3 / §7.1 |
-| Hides PNG file size on the wire          | ✅ pads to per-image target | ✅ pads to per-image target |
+| Hides "this PNG carries some LSB stego"          | ❌        | ❌ textbook statistics detect it (measured) — see §3 / §7.1 |
+| Hides PNG file size on the wire          | ✅ equal compressibility (1.0: padding) | ✅ equal compressibility (1.0: padding) |
+| Hides stealth vs plain from size, chunk lengths and LSB statistics | — | ✅ from the release after 1.0; ❌ in 1.0 (pad share 99.2 %, textbook tests) — see §3 / §7.7 / §7.10 |
 | Hides "was this PNG LSB-modified?"       | ❌        | ❌ (out of scope) |
 | Survives iMessage lossy recompression    | ❌        | ❌ |
 | Survives screenshot                      | ❌        | ❌ |
@@ -507,9 +640,8 @@ The protocol is documented in `README.md` §Protocol. The implementation is
 - `StigerCore/StegoMarker.swift` — header framing and HKDF/HMAC derivations
 - `StigerCore/ImageStegoEngine.swift` — LSB read/write, permutation, padding
 - `StigerCore/AESHelper.swift` — AES-GCM and PBKDF2 wrappers
-- `StigerCore/StegoSendPipeline.swift` — single send entry point (encode + pad)
-- `StigerCore/SendSizeNormalizer.swift` — per-image normalized byte size
-- `StigerCore/PNGPadder.swift` — `tEXt`-chunk-based PNG byte padding
+- `StigerCore/StegoSendPipeline.swift` — single send entry point (encode, or
+  the random-LSB cover for a plain send)
 
 A reference decoder in any language can be written against §Protocol of the
 README without reading the Swift source. If you write one and your decoder
@@ -522,10 +654,11 @@ end-to-end encode/decode through the LSB engine.
 
 ## 7. Known weaknesses (acknowledged, not fixed)
 
-1. **LSB modification is detectable to trained stegoanalysis.** See §3
+1. **LSB modification is detectable to statistical stegoanalysis.** See §3
    "Trained stegoanalysis classifiers" for what is detectable and what
-   is not. Mitigation would require adaptive embedding (HUGO, S-UNIWARD,
-   etc.) — not in v3, may revisit if the threat materialises.
+   is not; textbook tests already do it (measured). Mitigation would
+   require adaptive embedding (HUGO, S-UNIWARD, etc.) — not in v3, may
+   revisit if the threat materialises.
 
 2. **Password lives in iOS Keychain.**
 
@@ -608,17 +741,20 @@ end-to-end encode/decode through the LSB engine.
    Argon2id is revisited if decode ever moves out of the extension or
    if we observe real evidence of offline brute-force in the wild.
 
-7. **Pad chunk visible to file-level forensic.** The size-normalization
-   defense (§3, "File-size oracle") inserts a `tEXt` chunk of random bytes
-   to bring every send up to a per-image target size. An adversary who
-   opens the PNG file in a hex editor can see the chunk and infer that the
-   file was processed by some tool — though not which one, and not whether
-   a secret is present. This is a deliberate trade-off: the chunk is
-   invisible to a network observer (the model the defense targets), and
-   anyone with file-level access to extract the chunk also has the
-   installed Stiger app to find. Mitigation would require a different
-   padding strategy (e.g. lossless re-encode at fixed compression) that is
-   left for future work.
+7. **Pad chunk visible to file-level forensic, and its length gives the mode
+   away (release 1.0; removed afterwards).** The size-normalization defense of
+   1.0 (§3, "File-size oracle") inserted a
+   `tEXt` chunk of random printable ASCII to bring every send up to a
+   per-image target size. Anyone who parses the PNG sees a `Comment` of
+   2.4–79 KB (1 KB or more on all 133 stickers tested), unusual in the PNGs we
+   surveyed (§3). More importantly, measured
+   on 2026-10-10: the chunk's share of the file is about 5 % for stealth and
+   about 11 % for plain and open, enough to tell stealth from the other two
+   with 99.2 % balanced accuracy from chunk lengths alone. An earlier version
+   of this item said the chunk reveals neither the tool nor whether a secret
+   is present; the second half is false, the first is untested. Padding
+   differently does not fix it (§3). Fixed by dropping the pad (item 10) in the
+   release after 1.0; 1.0 itself keeps the weakness.
 
 8. **Cross-user overlap on shared imports.** If many Stiger users import
    the same Telegram pack (or the same publicly distributed image set),
@@ -626,9 +762,57 @@ end-to-end encode/decode through the LSB engine.
    the same rasterization on the same source. An adversary collecting
    Stiger stickers across users could in principle correlate carriers
    across senders. This is a corpus-level signal, not a per-sticker leak,
-   and is partially absorbed by send-side size normalization (§3); the
-   residual risk is very narrow and not addressed in v3. Importing from
+   and in 1.0 was partially absorbed by send-side size normalization (§3, since
+   removed; every send now has a fresh random LSB plane, but the other bits
+   still match across users); the residual risk is very narrow and not
+   addressed in v3. Importing from
    the public pack does **not** make LSB-detection-with-original easier:
    our import re-encodes the source `.webp` through `UIGraphicsImage-
    Renderer`, so the post-import PNG is no longer pixel-identical to the
    original Telegram file before any LSB modification.
+
+9. **Map previews reach Apple Maps without a tap.** Revealing a secret that
+   carries coordinates fetches a map snapshot of that area from Apple
+   immediately (§3, "Side channels"). A tap-to-load preview would close
+   this; it was weighed on 2026-09-29 and not taken. What leaks is the
+   recipient's IP and the approximate area, to Apple only — for a location
+   secret, that area is the substance of the secret.
+
+10. **Plain and open sends are statistically cleaner than stealth sends.**
+    In 1.0 a plain send leaves a sticker's LSBs as they were, and a stealth
+    send overwrites the whole blue LSB plane, so textbook tests tell them
+    apart (§3), as does the pad share (item 7).
+    *Implemented after 1.0, ships with the next release — uniform cover:*
+    every send, plain and open included, gets random blue LSBs on opaque
+    pixels (`ImageStegoEngine.coverImage` for plain; open: header and payload
+    laid over the random plane), and the pad is gone because sizes agree
+    without it.
+    Measured on the real engine without any pad, 133 stickers: cover-plain
+    and cover-open sends are within a median 0.04 % of stealth size (max
+    0.44 %; one mode against itself differs by a median 0.05 %); the LSB
+    tests flag them like stealth; only the blue channel of opaque pixels
+    changes (|Δ| ≤ 1); the reference decoder still reads open sends (40/40
+    checked); and the files are about 5 % smaller than today's padded sends
+    (`docs/experiment-steganalysis.md` §9). No wire-format change: the
+    `open-v1` and `stealth-v3` decoders read only the header and payload.
+    *What it does not do:* stealth sends — and after the change plain ones too
+    — stay detectable as LSB-modified, so "this PNG carries nothing" is lost
+    for every Stiger send, not only secret ones; open sends still carry
+    `STEG`; and during the rollout old clients keep padding while new ones
+    do not, a version cohort visible in the files; and a plain send of a
+    sticker too large for the engine now fails like a secret one does (the
+    1.0 plain path had no size cap), which the ingress policy should make
+    unreachable. What it buys is that an
+    observer cannot tell *which* sends carry a secret (small ML detectors cannot
+    either: about 50 %, `docs/experiment-steganalysis.md` §11). It is not a
+    replacement for lower-rate embedding (item 1), which needs a new stealth
+    version and would reduce detectability without removing it: SPAM found
+    low-fill ±1 embedding at whole-image AUC 0.63–0.71 at 1 % fill (§3).
+    *Also gone with the pad (1.0 behaviour read from the code, not measured on
+    a device):* 1.0's `SendSizeNormalizer` persisted, for every image sent
+    through the extension — plain sends included — `SHA-256(pixels) → target
+    size` plus a per-install random seed in the App Group `UserDefaults`, a
+    record on the phone of which images were sent through Stiger. The new
+    build deletes those keys at first launch (`SharedDefaults`, covered by a
+    unit test); that removes them from the defaults store and does not promise
+    the old bytes are gone from flash.

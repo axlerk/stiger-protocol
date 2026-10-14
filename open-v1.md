@@ -23,6 +23,8 @@ offset  size  field
 
 `L` is the value read from `payloadLength`. The decoder MUST reject:
 - a missing or mismatched magic,
+- a `version` other than `0x01`, so that a future incompatible format reusing
+  the same magic is not silently parsed as open-v1,
 - a `payloadLength` of `0`,
 - a `payloadLength` greater than `2048`,
 - a `payloadLength` greater than `floor(N / 8) - 9` where `N` is the eligible
@@ -33,6 +35,15 @@ offset  size  field
 At the wire-format level the payload is opaque bytes. Stiger's app layer
 uses UTF-8 text, but that interpretation is application-level and not part
 of this spec.
+
+## 2a. Bits outside the frame
+
+The frame is the 9-byte header plus `payloadLength` bytes. Every other LSB of
+the carrier is **unspecified**: a decoder MUST NOT read, check or depend on it,
+and an encoder MAY leave it as it was or fill it with random bits. The Swift
+engine fills it with random bits (so that open, stealth and no-secret sends of
+a sticker look alike to statistical tests); older releases left it untouched.
+Both are valid open-v1 carriers.
 
 ## 3. What "open" means
 

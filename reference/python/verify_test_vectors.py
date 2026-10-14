@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Pavel Khudiakov
 """Verify spec/test-vectors against the reference decoder.
 
 Reads `manifest.json` from the given directory, decodes every PNG entry,
