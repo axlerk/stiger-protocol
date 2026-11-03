@@ -156,7 +156,7 @@ real pipeline (67 each of stealth, open and plain) and on both delivered
 iMessage files, while reporting nothing in the LSB plane of any of them, and
 `exiftool` prints the pad as a `Comment` tag with the warning "Text/EXIF chunk(s)
 found after PNG IDAT" on both delivered files (`pngcheck` and `binwalk` report
-nothing unusual). The pad is gone from the release after 1.0 (§3 "File-size oracle", §7.7, §7.10).
+nothing unusual). The pad is gone from release 1.0 (build 49 onward; §3 "File-size oracle", §7.7, §7.10).
 
 ### D. Forensic chat-log reviewer
 Someone with access to the recipient's (or sender's) Messages history —
@@ -173,7 +173,7 @@ ordinary stickers and jumbo emoji: PNG dimensions are tuned so the
 in-bubble visible glyph matches Apple's native single-emoji jumbo on
 screen, the colour palette comes from Apple's own SBIX bitmaps, and
 every send (stealth, open, or plain) comes out at the same byte size — by
-equal compressibility under uniform cover from the release after 1.0, by
+equal compressibility under uniform cover from release 1.0, by
 padding in the beta (§3 "File-size oracle") — so an analyst skimming a chat list
 sees the same shape, the same size, the same general visual rhythm as the
 surrounding messages.
@@ -259,7 +259,7 @@ What still holds when this pattern is noticed, for **stealth** carriers:
   application directories found no `Comment` over 1 KB (§3 "File-size
   oracle"; that population is OS resources, not photos or other apps'
   stickers). Whether file-level tooling can attribute a send to Stiger from it
-  was never tested. The release after 1.0 has no pad chunk (§7.10).
+  was never tested. Release 1.0 has no pad chunk (§7.10).
 - *Mode opacity, total size only* — plain, open and stealth sends have the
   same total byte size (identical for 133/133 stickers in the beta; within a median
   0.04 % without any padding after 1.0), so the chat-level pattern doesn't
@@ -458,7 +458,7 @@ is hidden in opaque LSBs. Mission-class adversaries should assume this
 detection is feasible and design their operational use accordingly.
 
 ### File-size oracle on the wire
-**Defense (release after 1.0): uniform cover.** Every PNG sent through the
+**Defense (release 1.0, build 49 onward): uniform cover.** Every PNG sent through the
 iMessage extension — stealth, open and plain (no-secret) — leaves with a fully
 random blue-LSB plane on its opaque pixels. A plain send is the sticker with
 fresh random LSBs (`ImageStegoEngine.coverImage`); an open send is that random
@@ -474,8 +474,8 @@ modes is no larger than the run-to-run spread inside one mode. So:
   count alone, whether a sticker carries a secret.
 - No pad chunk exists, so there is no pad length or pad share to leak the mode
   and no `Comment` chunk for stock tooling to flag.
-- The send-size cache of 1.0 is gone; `SharedDefaults` deletes what 1.0 left in
-  the App Group defaults at the next launch (a hash per image ever sent).
+- The send-size cache of the beta builds is gone; `SharedDefaults` deletes what
+  they left in the App Group defaults at the next launch (a hash per image ever sent).
 
 This is not part of the wire spec: the `open-v1` and `stealth-v3` decoders read
 only the header and payload (`docs/experiment-steganalysis.md` §9).
@@ -619,8 +619,8 @@ misses the gate before merge. Therefore `.lapsed` (`!isPro` with a
 password saved) is reachable in production only by a former-Pro
 user whose subscription expired.
 
-**Saved passwords.** Since 1.1 there is no single "own" password and
-no "contact's password". Each chat has its own: the user decides on
+**Saved passwords.** Since release 1.0 (the beta builds had them) there is
+no single "own" password and no "contact's password". Each chat has its own: the user decides on
 every send and every typed reveal whether to keep it ("Save for this
 chat", which remembers the last choice). Kept passwords live in one
 Keychain item (`*ThisDeviceOnly`), together with which chat each is
@@ -713,7 +713,7 @@ end-to-end encode/decode through the LSB engine.
    - Auto-forget after N days of inactivity (closes long-tail residue;
      costs lost access to old chats if the user has not memorised the
      password).
-   - *(Implemented in 1.1:* Forget in Settings → Saved Passwords, one or
+   - *(Implemented in 1.0:* Forget in Settings → Saved Passwords, one or
      all, and on the reveal screen after a typed password opened a
      message.)
 
@@ -792,7 +792,7 @@ end-to-end encode/decode through the LSB engine.
 
 7. **Pad chunk visible to file-level forensic, and its length gives the mode
    away (beta builds through 48; removed before the public 1.0).** The size-normalization defense of
-   1.0 (§3, "File-size oracle") inserted a
+   the beta builds (§3, "File-size oracle") inserted a
    `tEXt` chunk of random printable ASCII to bring every send up to a
    per-image target size. Anyone who parses the PNG sees a `Comment` of
    2.4–79 KB (1 KB or more on all 133 stickers tested), unusual in the PNGs we
@@ -802,8 +802,8 @@ end-to-end encode/decode through the LSB engine.
    with 99.2 % balanced accuracy from chunk lengths alone. An earlier version
    of this item said the chunk reveals neither the tool nor whether a secret
    is present; the second half is false, the first is untested. Padding
-   differently does not fix it (§3). Fixed by dropping the pad (item 10) in the
-   release after 1.0; 1.0 itself keeps the weakness.
+   differently does not fix it (§3). Fixed by dropping the pad (item 10) in
+   release 1.0; only the beta builds have the weakness.
 
 8. **Cross-user overlap on shared imports.** If many Stiger users import
    the same Telegram pack (or the same publicly distributed image set),
