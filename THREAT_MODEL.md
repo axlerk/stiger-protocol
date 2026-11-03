@@ -349,6 +349,14 @@ Stiger is the wrong tool.
   itself is `localOnly` so the bytes never propagate via Universal Clipboard
   to the user's other Apple-ID-paired devices — see §3 "Universal Clipboard
   relay" for the positive guarantee.
+- Reading by paste (Settings → "Paste instead of drag", on by default below
+  iOS 18, where the drag cannot land: `docs/experiment-ios16-read-fallback.md`).
+  The received carrier reaches the clipboard through Messages' own Copy,
+  which Stiger does not control: the write is not `localOnly`, so the
+  carrier may be relayed by Universal Clipboard to the user's other devices,
+  and it stays on the clipboard until something else replaces it. The
+  `localOnly` guarantee above covers the send side only. The drag path
+  never touches the clipboard.
 - Third-party keyboards with Full Access (Gboard, SwiftKey, etc.)
   run in their own processes and can phone home with every keystroke
   entered into the secret-input text view. Stiger can't enforce a
@@ -556,7 +564,10 @@ The "Stealth v3" column above only applies when outgoing sends actually
 take the stealth code path. Three independent storage values determine
 that:
 
-- `password` (Keychain, `*ThisDeviceOnly`)
+- `password` — the password of the chat being written in: the one saved
+  for that chat, one picked from the saved list, or one typed in the
+  composer (saved passwords: one Keychain item, `*ThisDeviceOnly`; see
+  "Saved passwords" below)
 - `encryptionEnabled` (App Group `UserDefaults`, user toggle)
 - `isPro` (App Group `UserDefaults`, OR'd at read time with
   `RussianAudience.isRussianSpeaking`)
@@ -569,7 +580,7 @@ disagree. Stiger composes them into a typed `EncryptionState` (see
 | isPro | encryption | password | State              | Outgoing send mode |
 |-------|------------|----------|--------------------|--------------------|
 | ✓     | ✓          | set      | `.ready`           | stealth ✅          |
-| ✓     | ✓          | empty    | `.needsPassword`   | composer blocks    |
+| ✓     | ✓          | empty    | `.needsPassword`   | open, labelled "Send unencrypted" |
 | ✓     | ✗          | set      | `.userDisabled`    | open (banner)      |
 | ✓     | ✗          | empty    | `.proIdle`         | open               |
 | ✗     | ×          | set      | `.lapsed`          | open + dialog gate |
@@ -598,16 +609,31 @@ remediation: every disagreement is now a first-class value the UI
 renders explicitly, and the dialog gates plaintext sends behind
 explicit consent.
 
-**Pro-gate invariant**: `password != "" → isPro` (in production).
-Setting a non-empty password is a Pro-only operation. Every UI entry
-point that writes to `SharedDefaults.password` /
-`SharedDefaults.contactPassword` (Settings, ParanoiaGuide,
-PairingFlow, the extension's password field, contact-password
-auto-save on successful decode) guards on `proAccess.isPro`. A
-DEBUG-only `assertionFailure` in the keychain setter catches any
-future entry point that misses the gate before merge. Therefore
-`.lapsed` (`!isPro && password != ""`) is reachable in production
-only by a former-Pro user whose subscription expired.
+**Pro-gate invariant**: saved password → `isPro` (in production).
+Saving a password is a Pro-only operation. Every entry point that
+saves one (the composer on send, the reveal screen after a typed
+password opens a message, both sides of QR pairing) guards on
+`isPro`, and `ChatPasswordStore.save` refuses without it; a
+DEBUG-only `preconditionFailure` catches a future entry point that
+misses the gate before merge. Therefore `.lapsed` (`!isPro` with a
+password saved) is reachable in production only by a former-Pro
+user whose subscription expired.
+
+**Saved passwords.** Since 1.1 there is no single "own" password and
+no "contact's password". Each chat has its own: the user decides on
+every send and every typed reveal whether to keep it ("Save for this
+chat", which remembers the last choice). Kept passwords live in one
+Keychain item (`*ThisDeviceOnly`), together with which chat each is
+for. A chat is identified by the set of remote participant UUIDs
+Messages gives the extension — device-local values with no names or
+handles in them. **They are replaced whenever the app is installed
+again over itself** (measured on iOS 27.2 and 26.7.2 with developer
+installs, 2026-11-02, `docs/experiment-participant-ids.md`; App Store
+updates not measured), so the chat binding is a hint, not a key: a
+reveal tries the chat's password first and then up to seven other
+saved ones, and a saved password that opens a message is bound to the
+chat again. What this costs and buys, for someone holding the phone,
+is in §7 item 5.
 
 **Pro-restoration semantics.** When Pro returns (purchase or
 restore), `encryptionEnabled` and `password` are unchanged;
@@ -687,8 +713,9 @@ end-to-end encode/decode through the LSB engine.
    - Auto-forget after N days of inactivity (closes long-tail residue;
      costs lost access to old chats if the user has not memorised the
      password).
-   - A prominent "Forget password" control surfaced wherever the
-     password is shown, so users with imminent risk can wipe in one tap.
+   - *(Implemented in 1.1:* Forget in Settings → Saved Passwords, one or
+     all, and on the reveal screen after a typed password opened a
+     message.)
 
 3. **Open mode exists in the same UI as stealth mode.** A user who forgets
    to set a password sends a publicly readable message. Mitigated by explicit
@@ -700,24 +727,23 @@ end-to-end encode/decode through the LSB engine.
 
 4. **No forward secrecy.** A password leak retroactively decrypts every
    sticker ever sent under that password. *Operational mitigation:*
-   clearing the password field in Settings (or ParanoiaGuide) wipes
-   it from the Keychain; if no copy exists elsewhere, prior captures
-   become permanently undecryptable. Useful only when invoked
+   forgetting the password (Settings → Saved Passwords, or Forget on
+   the reveal screen) removes it from the Keychain; if no copy exists
+   elsewhere, prior captures become permanently undecryptable. Useful only when invoked
    *before* compromise — once an attacker has a Keychain dump, the
    wipe comes too late.
 
    Note: toggling encryption *off* does **not** wipe the saved
-   password (this used to wipe; see §4 "encryption state machine"
+   passwords (this used to wipe; see §4 "encryption state machine"
    for why the coupling was removed). Two distinct user intents,
    two distinct affordances:
 
-   - "Pause encryption temporarily, keep the credential" → toggle
-     off. Re-enabling restores the same password — no re-pairing,
+   - "Pause encryption temporarily, keep the credentials" → toggle
+     off. Re-enabling restores the same passwords — no re-pairing,
      no loss of access to old encrypted history.
-   - "Forget the credential entirely" → clear the password field
-     in Settings (the field is visible while encryption is on; a
-     dedicated "forget password" affordance is on the roadmap so
-     this works without an enable-then-clear-then-disable dance).
+   - "Forget a credential entirely" → Forget in Settings → Saved
+     Passwords (one, or all), or on the reveal screen right after a
+     typed password opened a message.
 
    The previous coupling lost the user's setup on every toggle-off,
    which both broke the re-enable use case and gave no extra
@@ -726,8 +752,30 @@ end-to-end encode/decode through the LSB engine.
    the extension/Settings is the real gate against on-device
    reads).
 
-5. **No per-recipient keys.** Pro offers a separate contact's password slot, but
-   password distribution is still manual.
+5. **Per-chat passwords, distributed by hand.** Each chat has its own
+   password, so one leaked or coerced password opens one chat, not every
+   correspondent's (with one shared password it opened them all, and it
+   spread from contact to contact). Distribution is still manual: in
+   person through QR pairing (which agrees a new 128-bit password every
+   time) or through a channel the user trusts. What it does not change,
+   and what it adds:
+   - Someone holding the unlocked phone, with the Face ID lock off (the
+     default) or knowing the passcode, opens with one drag every chat
+     whose password is saved — now possibly several. "Save for this chat"
+     off keeps a password out of the phone; the cost is typing it on
+     every reveal.
+   - The saved list is on-device metadata: how many passwords, when each
+     was saved, and any name the user gave it ("Lawyer"). A name is
+     optional: when a new password would be saved, a popup asks whether
+     to keep it, with an empty "Name (optional)" field ("Don't save" keeps
+     nothing and turns "Save for this chat" off), and a password can be
+     named later in Settings.
+     The list sits behind the Face ID lock with the rest of Settings,
+     which falls back to the passcode.
+   - Stiger cannot show which chat a password belongs to (Messages gives
+     no names), and the binding is lost on reinstall (see §4 "Saved
+     passwords"); a reveal then tries up to eight saved passwords, one
+     PBKDF2 run each.
 
 6. **PBKDF2, not Argon2id.** PBKDF2-SHA256 at 600 000 iterations is OWASP-
    recommended and ships in CommonCrypto. Argon2id would be more memory-

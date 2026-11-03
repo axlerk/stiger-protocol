@@ -7,7 +7,7 @@
 > the spec here is fine; canonical edits happen upstream and propagate on
 > every push to Stiger's `main`.
 
-This directory is the **normative specification** of the data formats Stiger
+This directory is the **normative specification** of the data formats [Stiger](https://onegoodman.studio/stiger)
 embeds inside PNG sticker images. It exists so that anyone — paranoid user,
 auditor, journalist with a captured sticker — can:
 
@@ -86,6 +86,6 @@ see [`THREAT_MODEL.md`](THREAT_MODEL.md).
 | Test vectors (`test-vectors/`) | CC BY 4.0 | [`LICENSE-DOCS`](LICENSE-DOCS) |
 | `legal/` (privacy policy, support page) | not covered — all rights reserved | — |
 
-Copyright 2026 Pavel Khudiakov (OneGoodMan Studio); see [`NOTICE`](NOTICE).
+Copyright 2026 Pavel Khudiakov ([OneGoodMan Studio](https://onegoodman.studio)); see [`NOTICE`](NOTICE).
 Re-implementing the format in another language is exactly what this
 repository is for — no permission needed, attribution appreciated.
