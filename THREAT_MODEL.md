@@ -626,10 +626,12 @@ chat", which remembers the last choice). Kept passwords live in one
 Keychain item (`*ThisDeviceOnly`), together with which chat each is
 for. A chat is identified by the set of remote participant UUIDs
 Messages gives the extension — device-local values with no names or
-handles in them. **They are replaced whenever the app is installed
-again over itself** (measured on iOS 27.2 and 26.7.2 with developer
-installs, 2026-11-02, `docs/experiment-participant-ids.md`; App Store
-updates not measured), so the chat binding is a hint, not a key: a
+handles in them. **They are replaced when the app is installed again
+over itself** (measured on iOS 27.2 and 26.7.2 with developer installs,
+2026-11-02) **but kept across a TestFlight update** (iOS 27.2, build 51 to
+52, 2026-11-03; an App Store update is assumed to behave the same, not
+measured; `docs/experiment-participant-ids.md`), so the chat binding is a
+hint, not a key: a
 reveal tries the chat's password first and then up to seven other
 saved ones, and a saved password that opens a message is bound to the
 chat again. What this costs and buys, for someone holding the phone,
