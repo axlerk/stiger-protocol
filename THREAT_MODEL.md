@@ -17,9 +17,10 @@ derived via PBKDF2-SHA256-600k) and hides the ciphertext in the
 least-significant bits of an ordinary PNG sticker, then sends it through
 iMessage. **What it protects:** the message content (unreadable without
 the password) and the message length (padded to LSB capacity). **What it
-does not:** statistical stegoanalysis can detect that *some* LSB modification
-happened (without recovering the message) — textbook tests need neither
-training nor the original, see §3; a compromised device, a
+does not:** a trained statistical classifier can detect that *some* LSB
+modification happened (without recovering the message); the textbook tests
+(chi-square, RS) no longer flag Stiger sends since the engine applies the LSB
+plane by ±1 matching, see §3; a compromised device, a
 forensic Keychain dump, screenshots, or iMessage recompression all defeat
 or destroy the payload. **Open mode** (no password) is publicly readable
 by anyone with Stiger and is not a privacy feature. **No forward secrecy:**
@@ -92,11 +93,17 @@ without the password — a passive observer cannot tell ciphertext from
 random LSBs. The LSBs of *natural photographs* would absorb this kind of
 modification well; sticker carriers (flat colour areas, sharp edges)
 provide weaker cover and are visible to statistical stegoanalysis
-even without the password — see §2E and §7.1. Textbook tests (pairs-of-values
-chi-square, RS) tell stealth carriers from unmodified stickers with no
-training and no original: 133/133 detected, 0/133 false positives for
-chi-square p ≥ 0.001, real engine, library stickers (measured 2026-10-10,
-`docs/experiment-steganalysis.md` §3, §5). The defense in this section is
+even without the password — see §2E and §7.1. Release 1.0 wrote the LSB plane
+by replacement, which equalises the (2k, 2k+1) value pairs; textbook tests
+(pairs-of-values chi-square, RS) then told stealth carriers from unmodified
+stickers with no training and no original — 133/133 detected, 0/133 false
+positives for chi-square p ≥ 0.001, real engine, library stickers (measured
+2026-10-10). The engine now applies the plane by ±1 matching, which those tests
+do not flag: plain 1/133, open 0/133, stealth 2/133 at p ≥ 0.001 and RS 2/133,
+the untouched-channel floor (measured 2026-11-04). A trained classifier still
+separates a Stiger send from an unmodified sticker at whole-image AUC 0.995
+(SPAM) to 0.997–1.000 (a reduced rich model) (`docs/experiment-steganalysis.md`
+§3, §5, §12). The defense in this section is
 against simple "look for known magic bytes" scanners — stock `zsteg` (default
 and `-a`) and `StegExpose` at its default threshold report no LSB finding on
 sticker-sized stealth carriers — not against statistical analysis.
@@ -312,9 +319,10 @@ LSBs touched). The number of modified LSBs no longer leaks the message length.
 
 **Limit:** the modification *rate* itself is still high (~50% of LSBs flipped
 on average vs ~0% for an unmodified PNG of the same source). Detection of
-"some LSB stego is present" is feasible — both via diff against the
-original and via statistical tests without the original (textbook ones
-suffice, measured in §3). See §3
+"some LSB stego is present" is feasible — via diff against the original, and
+via statistical tests without the original (a trained classifier; the textbook
+chi-square/RS no longer suffice since the engine applies the plane by ±1
+matching — §3, §12). See §3
 "Trained stegoanalysis classifiers" for the full picture and what still
 holds when this detection happens.
 
@@ -443,6 +451,22 @@ SPAM: whole-image AUC 0.63–0.71 at 1 % slot fill and 0.8–0.9 at 4–12 %. Th
 detectors are weak by research standards, and "not detected" by them is not "safe"
 (`docs/experiment-steganalysis.md` §11).
 
+**Update (2026-11-04): ±1 matching drops the textbook tests, not the trained
+ones.** The results above are release 1.0, which wrote the LSB plane by
+replacement. The engine now applies it by ±1 LSB matching, which reaches the
+same bit without equalising the value pairs: chi-square p ≥ 0.001 flags plain
+1/133, open 0/133, stealth 2/133, and RS d ≥ 0.25 flags 2/133 — the
+untouched-channel floor, against 133/133 and 118–120/133 under replacement. The
+trained detectors are unchanged (a matched send reads at whole-image AUC 0.995
+for SPAM and 0.997–1.000 for a reduced rich model, the same as replacement), and
+plain vs stealth stays at chance. So matching removes the textbook signal, not
+the trained-classifier one: "was this LSB-modified?" stays detectable to an
+adversary who trains. Aletheia's pretrained ±1 models are at chance on these
+flat stickers (AUC 0.500–0.512), but at chance on replacement too — cross-source
+mismatch (photo-trained models on flat art), not a property of the design. Cost:
+about 2 % more bytes per send, no wire-format change
+(`docs/experiment-steganalysis.md` §12).
+
 What still holds when "this is some LSB carrier" is detected:
 - *Content confidentiality* — AES-256-GCM ciphertext is not recoverable
   without the password.
@@ -499,9 +523,10 @@ onward), does not pad. See §7.7, §7.10 and
 `docs/experiment-steganalysis.md` §5, §6, §8.
 
 **Out of scope for this defense:**
-- Statistical LSB tests: under uniform cover they flag every Stiger send as
-  LSB-modified, plain ones included (§3 "Trained stegoanalysis classifiers",
-  §7.10).
+- Statistical LSB tests: a trained classifier flags every Stiger send as
+  LSB-modified, plain ones included; the textbook chi-square/RS do not, since
+  the plane is applied by ±1 matching (§3 "Trained stegoanalysis classifiers",
+  §7.10, §12).
 - LSB-detection by bitwise diff against a known original (unchanged from
   the previous section).
 
@@ -550,7 +575,7 @@ not by Stiger specifically.
 | Authenticity of message content          | ❌ none   | ✅ GCM tag |
 | Hides message length                     | ❌        | ✅ pads to capacity |
 | Hides Stiger-specific markers (magic / headers)  | ❌ `STEG` magic in cleartext | ✅ no magic, no fixed bytes |
-| Hides "this PNG carries some LSB stego"          | ❌        | ❌ textbook statistics detect it (measured) — see §3 / §7.1 |
+| Hides "this PNG carries some LSB stego"          | ❌        | ❌ a trained classifier detects it; textbook chi-square/RS no longer do (±1 matching, measured) — see §3 / §7.1 |
 | Hides PNG file size on the wire          | ✅ equal compressibility (1.0: padding) | ✅ equal compressibility (1.0: padding) |
 | Hides stealth vs plain from size, chunk lengths and LSB statistics | — | ✅ from release 1.0 (build 49 onward); ❌ in the beta builds (through 48; pad share 99.2 %, textbook tests) — see §3 / §7.7 / §7.10 |
 | Hides "was this PNG LSB-modified?"       | ❌        | ❌ (out of scope) |
@@ -685,8 +710,10 @@ end-to-end encode/decode through the LSB engine.
 
 1. **LSB modification is detectable to statistical stegoanalysis.** See §3
    "Trained stegoanalysis classifiers" for what is detectable and what
-   is not; textbook tests already do it (measured). Mitigation would
-   require adaptive embedding (HUGO, S-UNIWARD, etc.) — not in v3, may
+   is not. A trained classifier detects it (measured); the textbook
+   chi-square/RS no longer do, since the engine applies the plane by ±1
+   matching (§3, §12). Further mitigation would require adaptive embedding
+   (HUGO, S-UNIWARD, etc.) or a lower embedding rate — not in v3, may
    revisit if the threat materialises.
 
 2. **Password lives in iOS Keychain.**
@@ -847,8 +874,14 @@ end-to-end encode/decode through the LSB engine.
     (`docs/experiment-steganalysis.md` §9). No wire-format change: the
     `open-v1` and `stealth-v3` decoders read only the header and payload.
     *What it does not do:* stealth sends — and after the change plain ones too
-    — stay detectable as LSB-modified, so "this PNG carries nothing" is lost
-    for every Stiger send, not only secret ones; open sends still carry
+    — stay detectable as LSB-modified to a *trained* classifier (SPAM
+    whole-image AUC 0.995, a reduced rich model 0.997–1.000, §12), so "this
+    PNG carries nothing" is lost for every Stiger send, not only secret ones.
+    The textbook chi-square/RS no longer flag them: those tests read uniform
+    cover as modified because it was written by LSB *replacement*, and a later
+    change applies the plane by ±1 matching instead (§12), which drops them to
+    0–2/133 (the untouched-channel floor) at about 2 % more bytes per send, no
+    wire-format change. Open sends still carry
     `STEG`; and during the rollout old clients keep padding while new ones
     do not, a version cohort visible in the files; and a plain send of a
     sticker too large for the engine now fails like a secret one does (the

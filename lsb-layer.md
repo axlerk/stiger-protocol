@@ -25,6 +25,13 @@ pixel byte layout in memory: [ R, G, B, A ]
                                   bit used = (B & 1)
 ```
 
+**Encoder note.** This is not a wire-format requirement: decoders read only
+`B & 1`. The Swift engine sets the bit by **±1 LSB matching**. Where `B & 1`
+already equals the bit, `B` is left as it is. Otherwise `B` becomes `B + 1` or
+`B − 1`, chosen at random, except that 0 can only become 1 and 255 only 254.
+Red, green and alpha are not changed. Earlier versions of the engine set the
+bit by replacement (`B = (B & 0xFE) | bit`). Both are valid carriers.
+
 ## 3. Pixel selection
 
 A pixel is **eligible** if and only if its alpha is `0xFF` (fully opaque).
@@ -60,14 +67,15 @@ The byte stream is laid into slots in one of two orders:
   the password. The permutation is defined in [`stealth-v3.md`](stealth-v3.md).
 
 The permutation operates on the entire slot array, not just the message
-bits. In stealth mode every eligible pixel is overwritten, so the LSB
-stream of the carrier is statistically uniform from any observer who does
-not know the password.
+bits. In stealth mode the LSB of every eligible pixel is set: by the
+stream, or by random bits in the `N mod 8` slots past its end. So the LSB
+stream of the carrier is statistically uniform to any observer who does not
+know the password.
 
 ## 6. Reference
 
 The Swift engine that defines this mapping lives in
-`StigerCore/ImageStegoEngine.swift` (`opaqueIndices`, `writeBits`,
-`readBytes`). The reference Python decoder in
+`StigerCore/ImageStegoEngine.swift` (`opaqueIndices`, `placeBits`,
+`applyByMatching`, `readBytes`). The reference Python decoder in
 [`reference/python/stiger_decode.py`](reference/python/stiger_decode.py)
 re-implements the read path independently.
