@@ -10,24 +10,33 @@ implementation is wrong — please open an issue.
 For the byte-for-byte wire format and an independent reference decoder you
 can run yourself, see [`spec/`](spec/README.md).
 
-The body describes the engine as it is in this repository: a random LSB
-plane on every send ("uniform cover"), written by ±1 LSB matching. Earlier
-builds differed in ways that matter to anyone holding files from them; §8
-"History" tells that story once, with dates and build numbers. Every
-measurement behind a number here is in `docs/experiment-steganalysis.md`,
-cited by section.
+The body describes the engine as it is in this repository (formats
+`open-v2` and `stealth-v4`, build 56 onward): every send, with a secret or
+without, carries a stream of the same size — at most 2 100 bytes — as the
+syndrome of a syndrome-trellis code, with the changes placed by
+content-adaptive costs and made by ±1 on the blue channel. Earlier builds
+differed in ways that matter to anyone holding files from them; §8
+"History" tells that story once, with dates and build numbers. The
+measurements behind the numbers here are in
+`docs/experiment-steganalysis.md` (cited as "v1 §n"; the engines before
+build 56) and `docs/experiment-steganalysis-v2.md` ("v2 §n"; this engine).
+Where a number was measured on an earlier engine and not repeated on this
+one, the text says so.
 
 ## TL;DR
 
 **English.**
 
 - **Protects:** the content of a short message (AES-256-GCM, key derived from
-  the password by PBKDF2-SHA256, 600 000 iterations) and its length (the
-  ciphertext fills the whole LSB capacity), hidden in the least-significant
-  bits of an ordinary PNG sticker and sent through iMessage.
-- **Does not protect against:** a trained statistical classifier, which can
-  tell that *some* LSB modification happened without reading the message
-  (the textbook tests no longer flag it, §3); a compromised device, a
+  the password by PBKDF2-SHA256, 600 000 iterations) and its length (every
+  send carries a stream of the same size, whatever the message), hidden in
+  the least-significant bits of an ordinary PNG sticker and sent through
+  iMessage.
+- **Does not protect against:** anyone who has the original sticker, who
+  sees that the file was modified; a trained statistical classifier, which
+  finds a send on a drawn emoji almost every time and a send on a library
+  sticker somewhat better than a coin flip, without reading the message
+  (the textbook tests do not flag it, §3); a compromised device, a
   Keychain extracted by forensic tooling, screenshots or iMessage
   recompression, which defeat the protection or destroy the hidden message.
 - **Open mode** (no password) is readable by anyone with Stiger. It is not a
@@ -38,12 +47,16 @@ cited by section.
 **По-русски.**
 
 - **Защищает:** содержимое короткого сообщения (AES-256-GCM, ключ выводится
-  из пароля через PBKDF2-SHA256, 600 000 итераций) и его длину (шифротекст
-  заполняет всю ёмкость младших битов), спрятанного в младших битах обычного
-  стикера в формате PNG и отправленного через iMessage.
-- **Не защищает:** обученный статистический классификатор видит сам факт
-  изменения младших битов, не читая сообщения (учебные тесты его больше не
-  отмечают, §3); взломанное устройство, связка ключей Keychain, снятая
+  из пароля через PBKDF2-SHA256, 600 000 итераций) и его длину (каждая
+  отправка несёт поток одного и того же размера, каким бы ни было
+  сообщение), спрятанного в младших битах обычного стикера в формате PNG и
+  отправленного через iMessage.
+- **Не защищает:** тот, у кого есть исходный стикер, видит, что файл
+  изменён; обученный статистический классификатор находит отправку на
+  нарисованном эмодзи почти всегда, а на стикере из каталога — немного
+  лучше, чем подбрасыванием монеты, и сообщения при этом не читает (учебные
+  тесты отправку не отмечают, §3); взломанное устройство, связка ключей
+  Keychain, снятая
   криминалистическим инструментом, скриншоты и пережатие картинок в
   iMessage либо обходят защиту, либо уничтожают скрытое сообщение.
 - **Открытый режим** (без пароля) читает любой, у кого есть Stiger. Это не
@@ -65,24 +78,36 @@ transport", the measurements and notes for re-implementers in `README.md`
 
 There are two modes:
 
-- **Open mode** — no password set. The carrier is a *public* sticker. The
-  payload is framed by a fixed 9-byte header (`STEG` magic + version + length)
-  and stored in row-major LSBs. Anyone with Stiger — or anyone with this
-  spec and 30 lines of Python — can read it. **Open mode is not a privacy
-  feature.** It exists so the app is useful before the user pays.
+- **Open mode** (`open-v2`) — no password set. The carrier is a *public*
+  sticker. The payload is framed by a fixed 9-byte header (`STEG` magic +
+  version + length) at the start of the stream, and the stream is read
+  under a permutation key that is public (`spec/open-v2.md` §1). Anyone
+  with Stiger — or anyone with the spec and its reference decoder — can
+  read it. **Open mode is not a privacy feature.** It exists so the app is
+  useful before the user pays.
 
-- **Stealth mode v3** — password set (Pro). The carrier's LSB stream is
-  designed to look like uniform random noise to anyone who does not know
-  the password: the whole LSB capacity is filled with AES-256-GCM
-  ciphertext written through a password-derived pixel permutation, so
-  there is no plaintext marker, no length field, and no spatial pattern.
-  *We do not claim the resulting PNG is bit-for-bit indistinguishable
-  from an unmodified original* — that would require adaptive embedding
-  (§3 "Carrier indistinguishability", §7.1).
+- **Stealth mode** (`stealth-v4`) — password set (Pro). The stream is
+  designed to look like uniform random bytes to anyone who does not know
+  the password: all of it is a random salt, a keyed marker and AES-256-GCM
+  ciphertext, and it can only be read out of the image under a
+  password-derived pixel permutation, so there is no plaintext marker, no
+  length field, and no fixed position. *We do not claim the resulting PNG
+  is indistinguishable from an unmodified original:* the engine changes
+  few pixels and prefers textured ones, which lowers detection without the
+  original and does nothing against a comparison with it (§3 "Carrier
+  indistinguishability", §7.1).
 
-A send with no secret at all ("plain") gets the same kind of LSB plane as
-the other two, so that nothing about the file says which kind it is (§3
-"File-size oracle on the wire").
+**The stream** is what a carrier holds: `S = min(2100, N / 8)` bytes for
+`N` opaque pixels, the same for every mode and every message
+(`spec/lsb-layer.md` §4). It is not written into the pixels bit by bit; the
+receiver computes it as the syndrome of a syndrome-trellis code over the
+blue least-significant bits in permuted order, and the sender picks, among
+the ways to produce that syndrome, one that changes few pixels (§3
+"Trained stegoanalysis classifiers" has what that buys).
+
+A send with no secret at all ("plain") embeds a random stream of the same
+size in the same way, so that nothing about the file says which kind it is
+(§3 "File-size oracle on the wire").
 
 The two modes share the same engine but have **fundamentally different
 threat models**. The rest of this document covers stealth mode unless
@@ -94,24 +119,26 @@ otherwise stated.
 Someone who intercepts the PNG (from an iMessage backup, a forwarded file,
 a compromised relay) and runs standard LSB analysis.
 
-**Defense:** the entire LSB stream of opaque pixels is either AES-GCM
-ciphertext or header bytes HMAC-derived from the password. Both are
-computationally indistinguishable from uniform random noise without the
-password, so the observer cannot tell ciphertext from random LSBs. The
-engine writes the plane by ±1 LSB matching, which the textbook tests for
-LSB replacement (pairs-of-values chi-square, RS) do not flag: on all 133
-library stickers through the real engine, chi-square at p ≥ 0.001 flags
-plain 1/133, open 0/133 and stealth 2/133, and RS at d ≥ 0.25 flags 2/133
-of each — the false-positive floor of an untouched channel (measured
-2026-11-04, `docs/experiment-steganalysis.md` §12). Stock `zsteg` and
-`StegExpose` at its default threshold report no LSB finding either (§2.C).
+**Defense:** the whole stream is either AES-GCM ciphertext or header bytes
+HMAC-derived from the password. Both are computationally indistinguishable
+from uniform random bytes without the password, and without the password's
+permutation key the observer cannot even compute the stream. The engine
+changes a few percent of the opaque pixels, by ±1, which the textbook
+tests for LSB replacement (pairs-of-values chi-square, RS) do not flag. In
+simulation on all 133 library stickers at this stream size, chi-square at
+p ≥ 0.001 and RS at d ≥ 0.25 flag 0–1 of 133 (v2 §5); through the real
+engine on 24 of them, chi-square flags 0 of 24 and RS 1 of 24 (v2 §8″,
+2026-11-09) — the false-positive floor of an untouched channel. Stock
+`zsteg` and `StegExpose` at its default threshold reported no LSB finding
+on the earlier engines, which changed about half of the pixels (§2.C);
+they were not run again on this one.
 
 **Limit:** sticker carriers (flat colour areas, sharp edges) are weak
 cover, and a *trained* classifier still separates a Stiger send from an
-unmodified sticker without the original — §3 "Trained stegoanalysis
-classifiers" has the numbers and what still holds. Builds through 53 wrote
-the plane by replacement, which the textbook tests caught on every send
-(§8 "History").
+unmodified sticker without the original on some carriers — almost always
+on the drawn emoji. §3 "Trained stegoanalysis classifiers" has the numbers
+and what still holds. Builds through 53 wrote a full plane by replacement,
+which the textbook tests caught on every send (§8 "History").
 
 ### B. Reverse engineer with a copy of the .ipa
 Someone disassembles Stiger, reads the protocol, and tries every captured
@@ -151,19 +178,21 @@ attacker.
 Tools that look for known magic bytes (`STEG`, `STG2`, `JPEG comment + base64`,
 PNG `tEXt` chunks, etc).
 
-**Defense:** stealth mode has no magic bytes. (Open mode does: its carriers
-start with a fixed `STEG` header, and this defense does not apply to them —
-§1 and §2.D.) The first 16 bytes of the LSB stream are a random salt; the
-next 4 bytes are an HMAC-derived marker that varies per message; bytes
-20–21 are XOR-masked version and reserved bytes, authenticated by the same
-HMAC. Two encodings of the same message into the same image produce
-different LSB streams (only the LSB layer is randomised; the other bits are
-identical).
+**Defense:** stealth mode has no magic bytes. (Open mode does: its stream
+starts with a fixed `STEG` header, readable under the public permutation
+key, and this defense does not apply to it — §1 and §2.D.) The first 16
+bytes of the stream are a random salt; the next 4 bytes are an
+HMAC-derived marker that varies per message; bytes 20–21 are XOR-masked
+version and reserved bytes, authenticated by the same HMAC. Two encodings
+of the same message into the same image produce different streams and
+change different pixels (each changed pixel moves by 1 in the blue
+channel; nothing else differs).
 
-**Measured.** On stealth carriers `zsteg` (default and `-a`) and
-default-threshold `StegExpose` find no LSB payload, and the files the
-engine sends carry no `tEXt` chunk for such a scanner to print
-(`docs/experiment-steganalysis.md` §1, §2, §10). The beta builds did carry
+**Measured on the earlier engines, not repeated on this one.** On stealth
+carriers `zsteg` (default and `-a`) and default-threshold `StegExpose`
+found no LSB payload. The files the engine sends carry no `tEXt` chunk for
+such a scanner to print, then and now (v1 §1, §2, §10; chunk layout
+re-measured in v2 §1). The beta builds did carry
 one, a size-normalising `Comment` pad that `zsteg` and `exiftool` printed
 on every send; §8 "History".
 
@@ -219,21 +248,24 @@ What still holds when this pattern is noticed, for **stealth** carriers:
 - *Content confidentiality* — the payload is AES-GCM ciphertext as far as a
   reviewer can tell. They see "this user sends PNGs," not "this PNG hides
   text."
-- *Sender / recipient unlinking* — the LSB stream of a stealth carrier has
-  no app-specific fingerprint, so an analyst cannot identify Stiger from
-  that stream of a single carrier (§2.E for what changes with many
-  carriers). The beta builds' pad chunk was **not** covered by this (§8).
-- *Mode opacity* — plain, open and stealth sends have the same byte size and
-  the same LSB statistics (§3 "File-size oracle on the wire"), so the
-  chat-level pattern does not betray which mode is in use. In the beta this
-  did **not** hold at file level (§8).
+- *Sender / recipient unlinking* — the stream of a stealth carrier has
+  no app-specific fingerprint, and it cannot be computed without the
+  password, so an analyst cannot identify Stiger from a single stealth
+  carrier's bits (§2.E for what changes with many carriers, and with the
+  original). The beta builds' pad chunk was **not** covered by this (§8).
+- *Mode opacity* — plain, open and stealth sends carry a stream of the same
+  size, embedded the same way, and come out at about the same byte size
+  (§3 "File-size oracle on the wire"), so the chat-level pattern does not
+  betray which mode is in use. In the beta this did **not** hold at file
+  level (§8).
 
 **Open carriers break the first two.** An open-mode carrier stores its
-payload in plaintext behind the fixed `STEG` header (`spec/open-v1.md` §3),
-so any LSB scanner that applies the eligibility rule (`alpha == 255` only,
-`spec/lsb-layer.md` §3) reads the message and learns that Stiger was used.
-(Stock `zsteg` reads every pixel and misses it on stickers with
-transparency — measured, a tooling accident and not a defence.) One open
+payload in plaintext behind the fixed `STEG` header (`spec/open-v2.md` §2),
+and the key of its permutation is public, so any tool that implements the
+published format reads the message and learns that Stiger was used. (A
+generic LSB reader such as stock `zsteg` reads bits in pixel order and
+does not compute a syndrome, so it should not find it — inferred from the
+format, not measured, and a tooling accident, not a defence.) One open
 carrier in a chat also puts the other image attachments in that chat under
 suspicion: a stealth carrier next to a known Stiger carrier is attributable
 by association, even though it carries no fingerprint of its own
@@ -248,16 +280,21 @@ An adversary collects many Stiger stickers and runs structural diffs against
 the originals (which they may also have, since most stickers are public
 emoji).
 
-**Defense (partial):** length-hiding. Stealth mode pads the plaintext block
-to fill the *entire* LSB capacity of the carrier, so every encoded carrier
-of a given image has the same LSB modification rate (≈100% of opaque
-blue-channel LSBs touched). The number of modified LSBs no longer leaks the
-message length.
+**Defense (partial):** length-hiding. Every send, plain and open included,
+is padded to the same stream of 2 100 bytes — the 2 KB message limit plus
+overhead — or to the carrier's whole capacity when that is smaller. So
+every send of a given image carries the same amount and changes about the
+same number of pixels: the count does not leak the message length, which
+the app caps at 2 KB, nor the mode.
 
-**Limit:** the modification *rate* itself is still high (~50% of LSBs
-changed on average vs ~0% for an unmodified PNG of the same source).
-Detection of "some LSB stego is present" is feasible — via diff against the
-original, and via a trained classifier without it (§3 "Trained
+**Limit:** the changes are still there. A send changes a few percent of
+the opaque pixels (3.5 % on average over our 133 stickers in simulation at
+this stream size, v2 §5; a real syndrome-trellis code makes 11–18 % more
+changes than the simulation, v2 §7) and up to half of them on the smallest
+carriers,
+against none for an unmodified PNG of the same source. Detection of "this
+file was modified" is certain by diff against the original, and feasible
+without it for a trained classifier on some carriers (§3 "Trained
 stegoanalysis classifiers").
 
 ## 3. Adversaries we do NOT defend against
@@ -336,86 +373,124 @@ Stiger is the wrong tool.
   (`docs/experiment-steganalysis.md` §4).
 
 ### Carrier indistinguishability vs the original PNG
-v3 stealth hides *content* and *length*, not *the fact that LSB modification
-happened*. An adversary who has the unmodified source PNG and the suspected
-carrier can compute the diff and conclude "this PNG was processed by some
-LSB tool." They cannot recover the message, identify it as Stiger
-specifically (the LSB stream looks the same as any random data), or
-distinguish it from any other LSB tool's output. Defending against this
-would require model-based or adaptive embedding (HUGO, S-UNIWARD, etc.)
-and is not in scope.
+Stealth mode hides *content* and *length*, not *the fact that the image
+was modified*. An adversary who has the unmodified source PNG and the
+suspected carrier can compute the diff and conclude "this PNG was
+processed by some embedding tool": the changed pixels are there, each off
+by one in the blue channel. They cannot recover the message or tell a
+secret send from a plain one. The originals are easy to come by for our
+own carriers: the library stickers ship in the app, and the drawn emoji
+are rendered from the system font, so anyone with the app can rebuild them
+(assumed reproducible across devices on the same iOS; not tested across
+iOS versions, v2 "Not done").
+
+Adaptive embedding does **not** defend against this. It decides *where*
+the changes go (into texture) and how few there are, which is what lowers
+detection *without* the original (next section); a diff sees them
+wherever they are. Nothing short of leaving the image untouched defeats a
+comparison with the original, and that is not in scope.
 
 ### Trained stegoanalysis classifiers
 We do not defend against modern statistical or ML-based stegoanalysis
-(SPAM, SRM, SRNet, ZhuNet, Yedroudj-Net, and successors). On flat-colour
-sticker carriers our full-capacity fill is detectable by these tools with
-high accuracy, and they do not need the original source image — the
-detection rests on statistical features of the suspect carrier alone.
-Commercial forensic suites and well-funded examiners have such detectors.
+(SPAM, SRM, SRNet, ZhuNet, Yedroudj-Net, and successors). These tools do
+not need the original source image — the detection rests on statistical
+features of the suspect carrier alone. What the engine does is make that
+harder on carriers with texture: it embeds a short fixed-size stream
+instead of filling the carrier, uses a syndrome-trellis code so that few
+pixels change, and places the changes by a content-adaptive cost (HILL).
+Commercial forensic suites and well-funded examiners have stronger
+detectors than the ones we ran.
 
-**Measured, with two small detectors** (a research-grade one was not run,
-so the statement about ML tools above remains an assumption). A
-SPAM-feature model with logistic regression, trained on patches of the 133
-library stickers and tested on stickers it had not seen, tells a Stiger
-send from an untouched carrier at whole-image AUC 0.995, and a reduced
-spatial rich model at 0.997–1.000 — the same as when the plane was written
-by replacement, so ±1 matching removed the textbook signal (§2.A) and not
-the trained-classifier one. Plain against stealth, both sent through the
-engine, stays at chance (about 50 %): the detector sees "a Stiger send",
-not "a secret". A lower embedding rate would reduce this without removing
-it: SPAM found low-fill ±1 embedding, which the textbook tests missed, at
-whole-image AUC 0.63–0.71 at 1 % fill and 0.8–0.9 at 4–12 %. Aletheia's
-pretrained ±1 models score the flat stickers at chance (AUC 0.500–0.512),
-replacement included — a cross-source mismatch (photo-trained models on
-flat art), not a property of the design, so it is no cover. These
-detectors are weak by research standards, and "not detected" by them is
-not "safe" (`docs/experiment-steganalysis.md` §11, §12).
+**Measured, with two small detectors** (a research-grade one was not run).
+With a fixed 2 KB stream embedded by syndrome coding with content-adaptive
+(HILL) costs, a SPAM model trained on library stickers separates a send
+from an untouched carrier at whole-image AUC 0.54–0.61 on the 103 library
+stickers (three seeds; simulated embedding with a real syndrome-trellis
+code, v2 §7; a reduced spatial rich model reads 0.55–0.56) and close to
+that on a bounded run of the real engine itself (textured library stickers
+at chance, 0.53; the eight flattest and most saturated ones at 0.67–0.70;
+24 stickers, one seed, v2 §8″). **On the drawn emoji — small, flat, and
+the only carriers that do not look like Stiger's own art — it is
+0.99–1.00: essentially certain.** We ship them as stealth carriers anyway:
+a library sticker is recognisable on sight as ours, so restricting stealth
+to the library would remove exactly the carriers that do not announce the
+app, for a detector that already needs to suspect Stiger and have trained
+on Stiger-like images. A stealth send on a drawn emoji should be treated
+as detectable by that adversary; a stealth send on a library sticker, for
+the same adversary, as roughly a coin flip to somewhat worse on the
+flattest art. Plain against stealth, both sent through the engine, is
+alike by construction (every send embeds a stream of the same size the
+same way) and was at chance for these detectors on the previous engine
+(v1 §12): the detector sees "a Stiger send", not "a secret".
 
-What still holds when "this is some LSB carrier" is detected:
+What these figures are not. They are for small detectors trained on a few
+thousand patches of 133 flat illustrations; a detector trained on far more
+Stiger-like images, or one with the original image, does better, and
+content-adaptive schemes are what modern detectors are built against. The
+corpus is our own stickers: imported packs, user stickers and photos were
+not measured. Aletheia's pretrained ±1 models scored the flat stickers at
+chance on the earlier engines (AUC 0.500–0.512) — a cross-source mismatch
+(photo-trained models on flat art), not a property of the design, so it is
+no cover. "Not detected" by these detectors is not "safe" (v1 §11, §12; v2
+"Scope", "Recommendation"). Before build 56 the engine filled the whole
+carrier, and the same SPAM model read every send at 0.995 (§8 "History").
+
+What still holds when "this carrier was modified" is detected:
 - *Content confidentiality* — AES-256-GCM ciphertext is not recoverable
   without the password.
-- *Stiger-specific identification* — no magic bytes, no fixed headers, no
-  spatial pattern. The carrier looks like any other LSB tool's output.
-- *Payload length* — hidden by full-capacity padding.
-- *Which sends carry a secret* — plain, open and stealth sends look alike to
-  the detector and on the wire (§3 "File-size oracle on the wire").
+- *Stiger-specific identification from the bits* — a stealth stream has no
+  magic bytes and no fixed headers, and cannot be computed without the
+  password. (The carrier's look, the app on the phone and an open carrier
+  in the same chat can identify Stiger; §2.D.)
+- *Payload length* — hidden within the 2 KB message limit by the
+  fixed-size stream.
+- *Which sends carry a secret* — plain, open and stealth sends are embedded
+  alike and look alike on the wire (§3 "File-size oracle on the wire").
 
-What is lost: the deniability claim "this PNG carries nothing." A
-stegoanalysis classifier can say with high confidence that *something* is
-hidden in opaque LSBs — of every Stiger send, not only the secret ones.
-Anyone whose safety depends on it should assume this detection is feasible
-and plan their use accordingly.
+What is lost: the deniability claim "this PNG carries nothing", wherever
+the detector works — on the drawn emoji, on flat art, against anyone with
+the original — and it is lost for every Stiger send, not only the secret
+ones. Anyone whose safety depends on it should assume this detection is
+feasible and plan their use accordingly.
 
 ### File-size oracle on the wire
 **Defense: uniform cover.** Every PNG sent through the iMessage extension —
-stealth, open and plain (no-secret) — leaves with a fully random blue-LSB
-plane on its opaque pixels. A plain send is the sticker with fresh random
-LSBs (`ImageStegoEngine.coverImage`); an open send is that random plane
-with the 9-byte header and the payload laid over it; in a stealth send the
-AES-GCM block fills the capacity. Only the blue channel of opaque pixels
-changes, by at most 1. The three therefore compress alike and have the same
-byte size **without any padding**. Measured on the real engine, 133 library
-stickers, no pad (`docs/experiment-steganalysis.md` §9): cover-plain and
-cover-open sends are within a median 0.04 % (max 0.44 %) of the stealth
-send's size, and one kind against itself differs by a median 0.05 % — the
-gap between modes is no larger than the run-to-run spread inside one mode.
-The property survived the switch to ±1 matching (§12). So:
+stealth, open and plain (no-secret) — carries a stream of the same size,
+embedded by the same code with the same costs. A plain send embeds random
+bytes under a fresh random key (`ImageStegoEngine.coverImage`); an open
+send embeds its 9-byte header and payload, then random fill, under the
+public key; a stealth send embeds salt, marker and AES-GCM block under the
+password's key (`spec/lsb-layer.md` §7). Only the blue channel of opaque
+pixels changes, by at most 1, and about as many pixels change in each
+mode. The three therefore compress alike and come out at about the same
+byte size **without any padding**.
+
+Measured. On the previous engine (a full random plane), 133 library
+stickers through the real engine: stealth against plain bytes median
+1.0000, p10–p90 0.9992–1.0008, and the chunk layout identical across the
+three modes (v2 §1). On this engine the same comparison on the library has
+not been repeated; on synthetic carriers (2026-11-10, 40 sends per mode,
+recorded in commit `eb32933`) the per-mode median sizes agree within
+0.25 % on a 256 × 256 gradient, where a single send varies by about 1.2 %
+around the median, and everything lies within 0.4 % at 512 × 512. A send
+is now about 1 % larger than the untouched raster (simulated, v2 §5)
+rather than 7.6 % (measured on the full plane, v2 §1). So:
 
 - A network observer or anyone holding the chat history cannot tell, by
-  byte count alone, whether a sticker carries a secret.
+  byte count alone, whether a sticker carries a secret: the spread between
+  modes is inside the spread between two sends of one mode.
 - No pad chunk exists, so there is no pad length or pad share to leak the
   mode and no `Comment` chunk for stock tooling to flag.
 - The send-size cache of the beta builds is gone; `SharedDefaults` deletes
   what they left in the App Group defaults at the next launch.
 
-This is not part of the wire spec: the `open-v1` and `stealth-v3` decoders
-read only the header and payload. The beta builds padded instead, and the
-pad gave the mode away; §8 "History".
+The beta builds padded instead, and the pad gave the mode away; §8
+"History".
 
-**Out of scope for this defense:** a trained classifier flags every Stiger
-send as LSB-modified, plain ones included (§3 "Trained stegoanalysis
-classifiers"); LSB detection by bitwise diff against a known original
-(previous section).
+**Out of scope for this defense:** a trained classifier that flags Stiger
+sends flags plain ones too (§3 "Trained stegoanalysis classifiers");
+detection by diff against a known original (§3 "Carrier
+indistinguishability").
 
 ### Cryptanalysis of AES-GCM, PBKDF2, HMAC-SHA256, HKDF-SHA256
 We assume the underlying primitives are sound.
@@ -453,23 +528,23 @@ pasteboard, not by Stiger specifically.
 
 ## 4. Guarantees per mode
 
-|                                          | Open mode | Stealth v3 |
+|                                          | Open mode | Stealth v4 |
 |------------------------------------------|-----------|------------|
 | Confidentiality of message content       | ❌ none   | ✅ AES-256-GCM |
 | Authenticity of message content          | ❌ none   | ✅ GCM tag |
-| Hides message length                     | ❌        | ✅ pads to capacity |
-| Hides Stiger-specific markers (magic / headers)  | ❌ `STEG` magic in cleartext | ✅ no magic, no fixed bytes |
-| Hides "this PNG carries some LSB stego"          | ❌        | ❌ a trained classifier detects it; the textbook chi-square/RS do not (±1 matching, measured) — see §3 / §7.1 |
-| Hides PNG file size on the wire          | ✅ equal compressibility (uniform cover) | ✅ equal compressibility (uniform cover) |
-| Hides stealth vs plain from size, chunk lengths and LSB statistics | — | ✅ (the beta builds leaked it, §8) — see §3 / §7.7 / §7.10 |
-| Hides "was this PNG LSB-modified?"       | ❌        | ❌ (out of scope) |
+| Hides message length                     | ❌ the header states it | ✅ fixed-size stream, within the 2 KB limit |
+| Hides Stiger-specific markers (magic / headers)  | ❌ `STEG` magic, readable under the public key | ✅ no magic, no fixed bytes |
+| Hides "this PNG was modified", without the original | ❌        | ❌ a trained classifier finds a drawn emoji almost always and a library sticker at about a coin flip (small detectors, measured); the textbook chi-square/RS do not — see §3 / §7.1 |
+| Hides PNG file size on the wire          | ✅ same stream in every mode (uniform cover) | ✅ same stream in every mode (uniform cover) |
+| Hides stealth vs plain from size, chunk lengths and pixel statistics | — | ✅ (the beta builds leaked it, §8) — see §3 / §7.7 / §7.10 |
+| Hides "was this PNG modified?" from someone with the original | ❌        | ❌ (out of scope) |
 | Survives iMessage lossy recompression    | ❌        | ❌ |
 | Survives screenshot                      | ❌        | ❌ |
 | Survives device compromise               | ❌        | ❌ |
 
 ### When the stealth-mode guarantees apply
 
-The "Stealth v3" column applies only when an outgoing send actually takes
+The "Stealth v4" column applies only when an outgoing send actually takes
 the stealth code path. Three independent values decide that: the chat's
 password, the user's encryption toggle and the Pro entitlement. They can
 disagree, and Stiger composes them into a typed `EncryptionState` with one
@@ -515,34 +590,44 @@ and one "contact's" password instead (§8 "History").
 
 ## 6. How to verify
 
-The protocol is documented in `README.md` §Protocol. The implementation is
-~1 200 lines of Swift split across:
+The wire format is specified in [`spec/`](spec/README.md), with reference
+decoders in Python and TypeScript and test vectors. The implementation is
+about 1 600 lines of Swift split across:
 
 - `StigerCore/StegoMarker.swift` — header framing and HKDF/HMAC derivations
-- `StigerCore/ImageStegoEngine.swift` — LSB read/write, permutation, padding
+- `StigerCore/ImageStegoEngine.swift` — pixel read/write, permutation,
+  stream assembly
+- `StigerCore/STC.swift` — the syndrome-trellis code (syndrome for the
+  decoder, Viterbi search for the encoder)
+- `StigerCore/HILLCost.swift` — the content-adaptive cost of changing a
+  pixel (encoder only; a decoder never needs it)
 - `StigerCore/AESHelper.swift` — AES-GCM and PBKDF2 wrappers
 - `StigerCore/StegoSendPipeline.swift` — single send entry point (encode, or
-  the random-LSB cover for a plain send)
+  the random-stream cover for a plain send)
 
-A reference decoder in any language can be written against §Protocol of the
-README without reading the Swift source. If you write one and your decoder
-disagrees with Stiger on a test vector, the spec is wrong — please report
-it.
+A decoder in any language can be written against `spec/` without reading
+the Swift source. If you write one and your decoder disagrees with Stiger
+on a test vector, the spec is wrong — please report it.
 
 Tests in `StigerTests/` cover header roundtrips, wrong-password rejection,
-length-hiding, the absence of plaintext fingerprints in stealth headers, and
-end-to-end encode/decode through the LSB engine.
+length-hiding (the number of changed pixels does not follow the message
+length), damaged carriers, the absence of plaintext fingerprints in
+stealth headers, the code against the Python reference bit for bit, and
+end-to-end encode/decode through the engine and the committed vectors.
 
 ## 7. Known weaknesses (acknowledged, not fixed)
 
-1. **LSB modification is detectable to statistical stegoanalysis.** A
-   trained classifier detects it (measured); the textbook chi-square/RS no
-   longer do, since the engine applies the plane by ±1 matching (§3
-   "Trained stegoanalysis classifiers" for what is detectable and what is
-   not). Further mitigation would require adaptive embedding (HUGO,
-   S-UNIWARD, etc.) or a lower embedding rate, which reduces detectability
-   without removing it (§3) — not in v3, may revisit if the threat
-   materialises.
+1. **The modification is detectable to statistical stegoanalysis on some
+   carriers, and to anyone with the original on all of them.** The engine
+   already embeds at a low rate with a syndrome-trellis code and
+   content-adaptive costs; what is left is measured in §3 "Trained
+   stegoanalysis classifiers": the drawn emoji are found almost always,
+   the flattest library stickers more often than not, the rest at about a
+   coin flip, by small detectors. Not done: a research-grade detector
+   trained on Stiger-like images (SRNet class), carriers outside our own
+   library, other cost functions (S-UNIWARD, MiPOD), a searched code
+   matrix. Gating the drawn emoji out of stealth mode was weighed and not
+   taken (§3). The textbook chi-square/RS do not flag a send.
 
 2. **Password lives in iOS Keychain.**
 
@@ -620,14 +705,22 @@ end-to-end encode/decode through the LSB engine.
      PBKDF2 run each.
 
 6. **PBKDF2, not Argon2id.** PBKDF2-SHA256 at 600 000 iterations is
-   OWASP-recommended and ships in CommonCrypto. Argon2id would be more
-   memory-hard against GPU farms, but the iMessage extension runs under a
-   ~120 MB memory cap, which limits realistic `m_cost` to ~32–48 MB —
-   roughly 2–3 orders of magnitude slowdown over PBKDF2 instead of the 4–5
-   cited in the literature for full-strength parameters (these figures are
-   estimates, not measured). Given the cost
-   (third-party crypto dependency, wire-format bump, KDF migration in the
-   decoder) the trade is not currently favourable. Preferred path is to
+   OWASP-recommended and ships in CommonCrypto, which offers no other
+   password KDF (CryptoKit has none either; checked against the iOS 27.2
+   SDK, 2026-11-10). Argon2id would be more memory-hard against GPU farms.
+   An earlier version of this item ruled it out by memory: it said the
+   iMessage extension runs under a ~120 MB cap. That figure was an
+   assumption and does not hold where it was measured: a Messages
+   extension has 700 MB on an iPhone 12 mini and 800 MB on an iPhone 15
+   Pro (measured for Stecho, 2026-11-05; not measured for Stiger's own
+   extension or on older phones). Memory is therefore not what decides
+   this. What does: a third-party crypto dependency in the app, in both
+   reference decoders and in the site's in-browser decoder; another
+   wire-format version; and the time of a reveal, which runs the KDF up to
+   twice per password tried (the permutation key of a saved password is
+   cached) and may try eight. How much Argon2id would slow an
+   attacker at parameters a phone can afford has not been measured. On
+   those costs the trade is not currently favourable. Preferred path is to
    attack the root cause — weak passwords — via a strength meter and
    minimum-entropy gate in the password input UI (on the roadmap). Argon2id
    is revisited if decode ever moves out of the extension or if we observe
@@ -647,9 +740,9 @@ end-to-end encode/decode through the LSB engine.
    the same rasterization on the same source. An adversary collecting
    Stiger stickers across users could in principle correlate carriers
    across senders. This is a corpus-level signal, not a per-sticker leak;
-   every send has a fresh random LSB plane, but the other bits still match
-   across users, and the residual risk is very narrow and not addressed in
-   v3. Importing from the public pack does **not** make
+   every send changes its own random choice of pixels, but the rest still match
+   across users, and the residual risk is very narrow and not addressed.
+   Importing from the public pack does **not** make
    LSB-detection-with-original easier: our import re-encodes the source
    `.webp` through `UIGraphicsImageRenderer`, so the post-import PNG is no
    longer pixel-identical to the original Telegram file before any LSB
@@ -671,18 +764,17 @@ end-to-end encode/decode through the LSB engine.
    rather than as an attached location or a map link.
 
 10. **Every send is marked, so that no send stands out.** Uniform cover
-    gives plain and open sends the same random LSB plane as stealth sends,
-    so an observer cannot tell *which* sends carry a secret (§3 "File-size
-    oracle on the wire"; small ML detectors cannot either, §3 "Trained
-    stegoanalysis classifiers"). The price: "this PNG carries nothing" is
+    gives plain and open sends a random stream of the same size as a
+    stealth send's, embedded the same way, so an observer cannot tell
+    *which* sends carry a secret (§3 "File-size oracle on the wire"; §3
+    "Trained stegoanalysis classifiers"). The price: "this PNG carries nothing" is
     lost for every Stiger send, not only the secret ones; a plain send of a
     sticker too large for the engine now fails like a secret one does (the
     beta's plain path had no size cap), which the ingress policy should
     make unreachable; open sends still carry `STEG`; and during a rollout
     the old clients' sends form a visible version cohort in the files —
-    padded ones (beta), then replacement-written ones (builds 49–53), §8
-    "History". It is not a replacement for lower-rate embedding (item 1),
-    which needs a new stealth version.
+    padded ones (beta), then full planes written by replacement (builds
+    49–53) and by ±1 matching (builds 54–55), §8 "History".
 
 ## 8. History
 
@@ -772,3 +864,26 @@ reads 133/133 open and 133/133 stealth matched sends; the TypeScript one
 266/266) and the four committed test vectors still pass (§12). Old clients'
 replacement sends form a visible cohort during the rollout, as the padded
 ones did.
+
+**Fixed-size stream over a syndrome-trellis code: `open-v2` and
+`stealth-v4` (2026-11-08, build 56 onward).** Until then every send filled
+the whole capacity of the carrier, one bit per opaque pixel, so about half
+of the opaque pixels changed and a SPAM model trained on library stickers
+told a send from an untouched carrier at whole-image AUC 0.995 (a reduced
+rich model at 0.997–1.000; v1 §12). Since the app never accepted more than
+2 KB of message, the stream is now 2 100 bytes on every send (or the whole
+capacity of a smaller carrier), carried as the syndrome of a
+syndrome-trellis code over the permuted blue LSBs, with the changes placed
+by HILL costs. Length hiding and the likeness of plain, open and stealth
+sends are kept; no carrier lost capacity. On the library stickers the same
+detector reads 0.54–0.61; on the drawn emoji nothing changed (0.99–1.00),
+because a 2 KB stream is most or all of what they hold (§3 "Trained
+stegoanalysis classifiers"; v2 §5, §7, §8″). An encode takes 0.55 s and a
+decode 0.14 s on an iPhone 12 mini (Release build, one sticker of 166 911
+opaque pixels, 2026-11-09, v2 §8⁗).
+
+This is a wire-format change with no compatibility period: `open-v1` and
+`stealth-v3` never reached a release, and builds from 56 on do not read
+them. A sticker made by a TestFlight build through 55 does not open in a
+later build, and the reverse; it reads as a sticker with nothing in it.
+The full planes of builds 49–55 remain a visible cohort in old chats.
