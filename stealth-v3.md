@@ -1,5 +1,13 @@
 # Stealth Mode v3 (stealth-v3)
 
+> **Superseded (2026-11-08).** `stealth-v3` was the format of the TestFlight beta
+> and never reached a release. The current format is
+> [`stealth-v4.md`](stealth-v4.md); the transport layer it uses is the current
+> [`lsb-layer.md`](lsb-layer.md), which differs from what this page assumes
+> (bit-for-bit placement over the whole carrier). No shipping or reference
+> decoder reads this format. The text below is kept unchanged as history.
+
+
 The mode that protects messages. Without the password, every bit of the
 LSB stream is computationally indistinguishable from uniform random noise:
 no magic, no length, no fixed structure, no spatial pattern.

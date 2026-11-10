@@ -1,41 +1,76 @@
 {
   "generator" : "StigerTests\/SpecTestVectorsTests",
-  "spec_version" : "stealth-v3 \/ open-v1",
+  "spec_version" : "stealth-v4 \/ open-v2",
   "vectors" : [
     {
       "carrier_size" : "64x64 solid",
+      "eligible_pixels" : 4096,
       "mode" : "open",
       "name" : "open-hello",
-      "notes" : "Minimal open-mode vector. Anyone with the spec can read it.",
+      "notes" : "Minimal open-mode vector: 4 096 eligible pixels, so the stream is the whole capacity (512 bytes, m = N, width 1). Anyone with the spec can read it.",
       "plaintext_utf8" : "hello world",
-      "png" : "open-hello.png"
+      "png" : "open-hello.png",
+      "stream_bytes" : 512,
+      "submatrix_width" : 1
+    },
+    {
+      "carrier_size" : "512x512 textured",
+      "eligible_pixels" : 262144,
+      "mode" : "open",
+      "name" : "open-textured",
+      "notes" : "262 144 eligible pixels, a 2 100-byte stream, sub-matrix width 10; the public permutation key.",
+      "plaintext_utf8" : "open mode on a textured carrier: a 2 100-byte stream of which 9 + 48 bytes are the frame",
+      "png" : "open-textured.png",
+      "stream_bytes" : 2100,
+      "submatrix_width" : 16
     },
     {
       "carrier_size" : "128x128 solid",
+      "eligible_pixels" : 16384,
       "mode" : "stealth",
       "name" : "stealth-hello",
-      "notes" : "Smallest stealth-mode vector. Padding fills the rest of the LSB capacity.",
+      "notes" : "16 384 eligible pixels: just under the 16 800 that give a full 2 100-byte stream, so S = 2 048 bytes and m = N. Every pixel is flat, so the encoder changes about half of them.",
       "password" : "correct horse battery staple",
       "plaintext_utf8" : "hello world",
-      "png" : "stealth-hello.png"
+      "png" : "stealth-hello.png",
+      "stream_bytes" : 2048,
+      "submatrix_width" : 1
     },
     {
-      "carrier_size" : "256x256 solid",
+      "carrier_size" : "512x512 textured",
+      "eligible_pixels" : 262144,
       "mode" : "stealth",
-      "name" : "stealth-long-message",
-      "notes" : "Longer message; same wire format, same fixed carrier size.",
+      "name" : "stealth-textured",
+      "notes" : "The common case: a 2 100-byte stream in 262 144 eligible pixels, width 10, HILL costs placing the changes in texture.",
       "password" : "correct horse battery staple",
       "plaintext_utf8" : "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ",
-      "png" : "stealth-long-message.png"
+      "png" : "stealth-textured.png",
+      "stream_bytes" : 2100,
+      "submatrix_width" : 16
     },
     {
-      "carrier_size" : "256x256 with 10% transparent border",
+      "carrier_size" : "256x256 textured",
+      "eligible_pixels" : 65536,
+      "mode" : "stealth",
+      "name" : "stealth-long-message",
+      "notes" : "A 2 048-byte message, the maximum, fills the plaintext block with no padding.",
+      "password" : "correct horse battery staple",
+      "plaintext_utf8" : "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "png" : "stealth-long-message.png",
+      "stream_bytes" : 2100,
+      "submatrix_width" : 4
+    },
+    {
+      "carrier_size" : "256x256 textured with 10% transparent border",
+      "eligible_pixels" : 42436,
       "mode" : "stealth",
       "name" : "stealth-with-transparent-border",
-      "notes" : "Verifies that the decoder ignores alpha < 255 pixels.",
+      "notes" : "Verifies that the decoder ignores alpha < 255 pixels: 42 436 eligible pixels, width 3.",
       "password" : "correct horse battery staple",
       "plaintext_utf8" : "edge pixels are transparent and must be skipped",
-      "png" : "stealth-with-transparent-border.png"
+      "png" : "stealth-with-transparent-border.png",
+      "stream_bytes" : 2100,
+      "submatrix_width" : 3
     }
   ]
 }

@@ -1,5 +1,13 @@
 # Open Mode (open-v1)
 
+> **Superseded (2026-11-08).** `open-v1` was the format of the TestFlight beta
+> and never reached a release. The current format is
+> [`open-v2.md`](open-v2.md); the transport layer it uses is the current
+> [`lsb-layer.md`](lsb-layer.md), which differs from what this page assumes
+> (bit-for-bit placement over the whole carrier). No shipping or reference
+> decoder reads this format. The text below is kept unchanged as history.
+
+
 **Open mode is not a privacy feature.** Anyone who reads this document and
 writes 30 lines of Python can read every open-mode payload. It exists so the
 app is useful before the user pays for stealth mode.

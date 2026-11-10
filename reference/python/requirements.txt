@@ -1,2 +1,5 @@
 Pillow>=10.0
 cryptography>=42.0
+# the encoder only:
+numpy>=1.26
+scipy>=1.11

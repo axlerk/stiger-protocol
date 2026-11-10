@@ -1,8 +1,8 @@
 # Reference Decoder (TypeScript)
 
-Independent decoder for the Stiger wire format. Around 350 lines, no Stiger
-code involved, written from [`../../stealth-v3.md`](../../stealth-v3.md),
-[`../../open-v1.md`](../../open-v1.md) and [`../../lsb-layer.md`](../../lsb-layer.md)
+Independent decoder for the Stiger wire format. Around 400 lines, no Stiger
+code involved, written from [`../../stealth-v4.md`](../../stealth-v4.md),
+[`../../open-v2.md`](../../open-v2.md) and [`../../lsb-layer.md`](../../lsb-layer.md)
 only.
 
 Pairs with the [Python reference](../python/) — both decode the same test
@@ -51,7 +51,7 @@ const result = await decode(rgba, 'your passphrase');
 ```
 
 A wrong password is indistinguishable from "no payload" — that is by
-design. See [`../../stealth-v3.md`](../../stealth-v3.md) §4.
+design. See [`../../stealth-v4.md`](../../stealth-v4.md) §4.
 
 ## In the browser
 
@@ -66,7 +66,9 @@ const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
 const result = await decode(data, password);
 ```
 
-PBKDF2 with 600 000 iterations runs in ~1–2 s on the WebCrypto fast path.
+PBKDF2 with 600 000 iterations runs in ~1–2 s on the WebCrypto fast path;
+stealth mode runs it twice (the walk's key and the message key). The
+syndrome itself is one pass over the eligible pixels.
 
 ## Verify against test vectors
 
